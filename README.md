@@ -13,7 +13,13 @@ VITE_SITE_URL=https://your-real-domain.com   # no trailing slash
 ```
 
 This file holds no secrets and is committed on purpose, so a fresh clone builds
-with correct URLs. Hosts can override it with their own environment variable.
+with correct URLs.
+
+**Host environment variables win over this file.** On Vercel or Netlify, set
+`VITE_SITE_URL` in the project's environment-variable settings — and if you
+create it there, give it a real value. The build falls back to
+`http://localhost:5173` and prints a warning when it is unset or blank, so a
+missing value degrades the metadata rather than breaking the build.
 
 ## Stack
 
