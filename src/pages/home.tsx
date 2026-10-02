@@ -8,7 +8,7 @@ import { Hud } from "@/components/journey/hud"
 import { SceneIntro } from "@/components/journey/scene-intro"
 import { StageHelloWorld } from "@/components/journey/stage-hello-world"
 import { StageSnake } from "@/components/journey/stage-snake"
-import { StageAndroid, StageSavePoint } from "@/components/journey/stage-save-android"
+import { StageAndroid } from "@/components/journey/stage-android"
 import { StageFullStack, StageWeb } from "@/components/journey/stage-web"
 import { StageInternship } from "@/components/journey/stage-internship"
 import { StageAiEra, StageBoss, StageFreelance } from "@/components/journey/stage-boss"
@@ -29,7 +29,6 @@ export default function Home() {
       <SceneIntro />
       <StageHelloWorld />
       <StageSnake />
-      <StageSavePoint />
       <StageAndroid />
       <StageWeb />
       <StageFullStack />

@@ -1,87 +1,8 @@
 import * as React from "react"
 import { motion, useReducedMotion } from "motion/react"
 import { Button } from "@/components/ui/8bit/button"
-import { cn } from "@/lib/utils"
-import { Dialogue, Stage, StageTitle, Sfx, PixelSprite, type Sprite } from "./primitives"
+import { Dialogue, Stage, StageTitle, Sfx } from "./primitives"
 import { EASE } from "./hooks"
-
-const CRYSTAL: Sprite = {
-  palette: { C: "#3ee6ff", c: "#1a9bb8", w: "#e8fdff" },
-  rows: [
-    "....C....",
-    "...CwC...",
-    "..CwCCC..",
-    ".CwCCCCc.",
-    "CCCCCCCcc",
-    ".CCCCCcc.",
-    "..CCCcc..",
-    "...Ccc...",
-    "....c....",
-  ],
-}
-
-const QUESTS: Array<{ label: string; done: boolean; isNew?: boolean }> = [
-  { label: "Print Hello World", done: true },
-  { label: "Build a love calculator", done: true },
-  { label: "Build a snake game, offline", done: true },
-  { label: "Take a drop year, aim for engineering", done: true },
-  { label: "NEW ROUTE: B.Sc. Computer Science · Doon University · 2020", done: false, isNew: true },
-]
-
-export function StageSavePoint() {
-  const reduced = useReducedMotion()
-  return (
-    <Stage id="save-point" className="overflow-clip bg-night pb-28">
-      <StageTitle id="save-point" kicker="Every RPG has a quiet room with a glowing crystal. 2019 was mine." />
-      <div className="mx-auto grid max-w-5xl items-center gap-12 px-4 md:grid-cols-[auto_1fr]">
-        <div className="relative mx-auto flex flex-col items-center">
-          <div className="absolute inset-0 -z-0 rounded-full bg-px-cyan/20 blur-3xl" />
-          <PixelSprite sprite={CRYSTAL} className="relative w-28 animate-bob drop-shadow-[0_0_24px_#3ee6ff]" />
-          <p className="retro mt-6 text-[0.625rem] text-px-cyan">SAVE POINT</p>
-        </div>
-
-        <div className="px-frame-shadow bg-ink p-5 sm:p-7">
-          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b-4 border-night pb-3">
-            <p className="retro text-[0.625rem] text-px-yellow">SLOT 1 · ASHFAQ</p>
-            <p className="retro text-[0.5625rem] text-lilac">2019 · DROP YEAR</p>
-          </div>
-          <ul className="mt-4 flex flex-col gap-3">
-            {QUESTS.map((q, i) => (
-              <motion.li
-                key={q.label}
-                className={cn(
-                  "flex items-start gap-3 font-pixel-sans text-lg leading-snug",
-                  q.isNew ? "text-px-yellow" : "text-cream"
-                )}
-                initial={reduced ? false : { opacity: 0, x: -16 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, amount: 0.8 }}
-                transition={{ delay: i * 0.12, duration: 0.45, ease: EASE }}
-              >
-                <span
-                  aria-hidden
-                  className={cn(
-                    "retro mt-1 grid size-5 shrink-0 place-items-center text-[0.5rem]",
-                    q.done ? "bg-px-green text-night" : "animate-blink bg-px-yellow text-night"
-                  )}
-                >
-                  {q.done ? "✓" : "!"}
-                </span>
-                <span>
-                  <span className="sr-only">{q.done ? "Done: " : "Next: "}</span>
-                  {q.label}
-                </span>
-              </motion.li>
-            ))}
-          </ul>
-        </div>
-      </div>
-      <Dialogue speaker="ASHFAQ · 2019" tone="cyan" className="mt-16 px-4">
-        Took a drop year. Goal: become an engineer. 2020: B.Sc. Computer Science unlocked. Grind mode: on.
-      </Dialogue>
-    </Stage>
-  )
-}
 
 /* ------------------------------------------------------------------------- */
 

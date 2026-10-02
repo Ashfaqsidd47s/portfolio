@@ -2,7 +2,7 @@
 
 Personal portfolio and résumé site. The home page is a scroll-driven pixel-art
 "game" of my developer journey: it boots on a 3D CRT computer, dives into Turbo
-C++, and plays through sixteen stages from 2018 to today, several of them
+C++, and plays through fifteen stages from 2018 to today, several of them
 playable. The recent products (TrypNow, SureGem, 11jobs, 11Matrix) each "boot"
 in a browser window and run as clickable demos on fake data. The `/resume` page stays a clean, printable document.
 
