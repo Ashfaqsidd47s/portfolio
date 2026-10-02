@@ -228,10 +228,10 @@ function SiteBurst() {
 export function StageWeb() {
   return (
     <Stage id="web" className="overflow-clip bg-[#1a1240] pb-28">
-      <StageTitle id="web" kicker="New route, new rules. Back to the fundamentals." />
+      <StageTitle id="web" kicker="New route. Back to basics: what even is a div?" />
       <WebScene />
       <Dialogue speaker="ASHFAQ · 2020" tone="cyan" className="mb-14 px-4">
-        Once it clicked, I couldn't stop. I made a LOT of static sites in about a month. Some of them were even called final.
+        Once it clicked I shipped a LOT of static sites in a month. Naming them was the hardest part.
       </Dialogue>
       <SiteBurst />
     </Stage>
@@ -309,10 +309,10 @@ export function StageFullStack() {
   const reduced = useReducedMotion()
   return (
     <Stage id="full-stack" className="overflow-clip bg-night pb-28">
-      <StageTitle id="full-stack" kicker="Static sites were fun. But where does the data live?" />
+      <StageTitle id="full-stack" kicker="Static sites are cute. But where does the data live?" />
       <Cartridges />
       <Dialogue speaker="ASHFAQ · 2021" tone="pink" className="mt-14 px-4">
-        So I picked up a tutorial for a social media app on the MERN stack and refused to stop until it was done. Users, posts, a real database behind it all. My first full-stack project, finished.
+        Grabbed a MERN social-media tutorial and actually finished it, which statistically nobody does. Users, posts, a real database. First full-stack app ✓
       </Dialogue>
 
       <motion.div

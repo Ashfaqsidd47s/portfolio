@@ -260,12 +260,12 @@ export function StageSnake() {
     <Stage id="snake" className="overflow-clip bg-black pb-28">
       <StageTitle
         id="snake"
-        kicker="Then I found the graphics library, and printing text stopped being enough."
+        kicker="Then I found graphics.h. Text mode was dead to me."
       />
       <div className="relative">
         <Sfx className="-top-10 right-[8%] hidden text-7xl text-tc-green md:block">ゴゴゴ</Sfx>
         <Dialogue speaker="ASHFAQ · 2019" tone="green" className="mb-12 px-4">
-          No internet, no tutorials, no Stack Overflow. Just graphics.h, a lot of trial and error, and a snake that kept eating itself. I built the whole game myself, and it was great. Here it is again, rebuilt for the browser. Have a go.
+          No internet. No tutorials. No Stack Overflow. Just graphics.h and pure stubbornness. Built snake from scratch. Here it is again, now with 100% more browser.
         </Dialogue>
       </div>
       <SnakeGame />

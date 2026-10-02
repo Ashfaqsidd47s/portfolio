@@ -98,9 +98,9 @@ function BeforeAfter() {
 export function StageAiEra() {
   return (
     <Stage id="ai-era" className="overflow-clip bg-[#1c1530] pb-28">
-      <StageTitle id="ai-era" kicker="Then I started my MCA, and the way everyone writes code changed." />
+      <StageTitle id="ai-era" kicker="Started my MCA. Then ChatGPT dropped and coding changed overnight." />
       <Dialogue speaker="ASHFAQ · 2023" tone="green" className="mb-14 px-4">
-        I kept building full-stack projects and getting better every day. And around the end of my first internship, ChatGPT actually started working. No more Stack Overflow for simple bugs. Saying "back in my day we read ten tabs to fix one bug" already sounds like a grandpa story.
+        More full-stack projects, levelling up daily. Then ChatGPT got good, and "I read ten Stack Overflow tabs to fix one bug" became a grandpa story.
       </Dialogue>
       <BeforeAfter />
     </Stage>
@@ -242,16 +242,16 @@ function BossScene() {
 export function StageBoss() {
   return (
     <Stage id="boss" className="overflow-clip bg-[#1a0b1f] pb-28">
-      <StageTitle id="boss" kicker="Second year of MCA, second internship. A real team this time." />
+      <StageTitle id="boss" kicker="MCA year two. New internship. A real team, a real manager." />
       <div className="relative">
         <Sfx className="right-[6%] top-0 hidden text-7xl text-px-red md:block">ゴゴゴ</Sfx>
         <Dialogue speaker="ASHFAQ · 2025" tone="pink" className="px-4">
-          A service-based company, with teams, a manager and a lead. Finally, I thought, here I'll learn on good code. Honestly, it was worse than my first internship. One project had been through ten interns, plus a few serious developers in a few corners. State management alone came in five flavours.
+          "Finally, clean code," I thought. Narrator: it was not. Ten interns, a few real devs, and state management in five flavours. In one app.
         </Dialogue>
       </div>
       <BossScene />
       <Dialogue speaker="ASHFAQ · 2025" tone="yellow" className="px-4">
-        My first task: fix the whole application in two days, or the client walks. I'd already mapped all five patterns, so I fixed it single-handed, without AI. It made me a better developer.
+        Task one: fix the whole app in 2 days or the client walks. Mapped all five patterns, fixed it solo, no AI. Pain is a great teacher.
       </Dialogue>
       <Achievement className="mt-12" title="Survived a five-pattern codebase" detail="and shipped the fix before the deadline" />
     </Stage>
@@ -274,7 +274,7 @@ export function StageFreelance() {
   const reduced = useReducedMotion()
   return (
     <Stage id="freelance" className="overflow-clip bg-night pb-28">
-      <StageTitle id="freelance" kicker="After the chaos, anything looks clean." />
+      <StageTitle id="freelance" kicker="After that codebase, clean MVC felt like a spa day." />
       <div className="mx-auto grid max-w-5xl items-center gap-10 px-4 md:grid-cols-[1.2fr_1fr]">
         <motion.div
           className="border-4 border-night bg-[#1e1b3a] shadow-[10px_12px_0_rgb(0_0_0/0.45)]"
@@ -297,10 +297,10 @@ export function StageFreelance() {
         </motion.div>
         <div className="flex flex-col gap-6">
           <Dialogue speaker="ASHFAQ · 2025" tone="cyan" className="mt-0">
-            Next, a few freelance jobs, mostly backend work in Laravel. It was nice code, and simple for me — I'd seen enough chaos by then.
+            Freelance Laravel backends. Nice code, zero drama. I'd seen enough chaos.
           </Dialogue>
           <Dialogue speaker="ASHFAQ · 2025" tone="green" className="mt-0">
-            By now AI was everywhere. If you know the concepts, it fixes things for you, even if you're just pasting code into a chatbot. Agents were only starting to catch on, but it got the job done.
+            AI was everywhere now. Know the concepts, let the robot type. Agents were still in beta, vibes were not.
           </Dialogue>
         </div>
       </div>
