@@ -171,7 +171,7 @@ export function StageFirstJob() {
       <StageTitle id="first-job" kicker="Hired for frontend. Got the whole stack. No complaints." />
       <ClassChange />
 
-      <div className="mx-auto mt-20 grid max-w-5xl items-center gap-10 px-4 md:grid-cols-2">
+      <div className="mx-auto mt-20 max-w-xl px-4">
         <Dialogue speaker="QUEST 1 · SHOPIFY APPS" tone="green" className="mt-0">
           Shopify apps. Not stores, apps: React that lives inside someone else's admin and talks to their product and order APIs. Weird that this exists. Works great.
         </Dialogue>

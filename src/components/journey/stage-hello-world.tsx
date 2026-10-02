@@ -4,6 +4,7 @@ import { Progress } from "@/components/ui/8bit/progress"
 import { Button } from "@/components/ui/8bit/button"
 import { cn } from "@/lib/utils"
 import { Dialogue, PixelSprite, Stage, StageTitle } from "./primitives"
+import { useSay } from "./companion-context"
 import { useSceneProgress, useSteppedValue } from "./hooks"
 import { HEART } from "./sprites"
 
@@ -94,6 +95,12 @@ function HelloWorldScene() {
   const total = HELLO.reduce((n, l) => n + l.map((t) => t[0]).join("").length + 1, 0)
   const chars = Math.floor(Math.min(1, p / 0.5) * total)
   const phase = p < 0.52 ? 0 : p < 0.72 ? 1 : 2
+  const say = useSay()
+  const started = p > 0.02
+
+  React.useEffect(() => {
+    if (started) say({ speaker: "ASHFAQ · 2018", text: CAPTIONS[phase], tone: "pink" })
+  }, [phase, started, say])
 
   return (
     <div ref={ref} className={reduced ? "relative" : "relative h-[300vh]"}>
@@ -172,27 +179,6 @@ function HelloWorldScene() {
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Narration */}
-        <div className="pointer-events-none absolute inset-x-3 bottom-12 z-10 sm:bottom-14">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={phase}
-              className="px-frame-shadow relative mx-auto max-w-2xl bg-night/95 px-5 py-4"
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: -10, opacity: 0 }}
-              transition={{ duration: 0.25 }}
-            >
-              <span className="retro absolute -top-3 left-4 bg-px-pink px-2 py-1 text-[0.5625rem] text-night">
-                ASHFAQ · 2018
-              </span>
-              <p className="text-pretty font-pixel-sans text-lg leading-snug text-cream sm:text-xl">
-                {CAPTIONS[phase]}
-              </p>
-            </motion.div>
-          </AnimatePresence>
-        </div>
       </div>
       {/* Every caption, readable without scrolling through the scene. */}
       <div className="sr-only">
