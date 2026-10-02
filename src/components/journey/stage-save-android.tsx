@@ -77,7 +77,7 @@ export function StageSavePoint() {
         </div>
       </div>
       <Dialogue speaker="ASHFAQ · 2019" tone="cyan" className="mt-16 px-4">
-        After school I took a drop year. The plan was to become an engineer. In 2020 that plan took shape as a B.Sc. in Computer Science, and the real grind started.
+        Took a drop year. Goal: become an engineer. 2020: B.Sc. Computer Science unlocked. Grind mode: on.
       </Dialogue>
     </Stage>
   )
@@ -203,7 +203,7 @@ export function StageAndroid() {
   const reduced = useReducedMotion()
   return (
     <Stage id="android" className="overflow-clip bg-[#0f2416] pb-28">
-      <StageTitle id="android" kicker="First year of B.Sc. CS, and I wanted to build apps for the phone in my pocket." />
+      <StageTitle id="android" kicker="Year one of B.Sc. CS. Mission: apps for the phone in my pocket." />
       <div className="mx-auto grid max-w-5xl items-center gap-14 px-4 md:grid-cols-2">
         <div className="relative">
           <Phone />
@@ -212,7 +212,7 @@ export function StageAndroid() {
 
         <div className="flex flex-col gap-10">
           <Dialogue speaker="ASHFAQ · 2020" tone="green" className="mt-0">
-            I was obsessed with Android development. I made tiny games like tic-tac-toe (there's a remake on the phone here, go on). Then I hit the final boss of Android dev: my own laptop.
+            Built tiny Android games like tic-tac-toe (go on, play it). Then I met the real final boss: the emulator vs. my laptop.
           </Dialogue>
 
           <motion.div
@@ -255,7 +255,7 @@ export function StageAndroid() {
           ↻ NEW ROUTE: THE WEB
         </p>
         <p className="max-w-lg font-pixel-sans text-xl text-cream">
-          It ran in any browser, on any machine, including mine. So I switched.
+          Runs on any machine. Even mine. Sold.
         </p>
         <Button asChild size="sm" className="mt-3 bg-px-yellow text-[0.5625rem] text-night">
           <a href="#web">CONTINUE ▶</a>

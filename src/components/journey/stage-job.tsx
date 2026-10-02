@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/8bit/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/8bit/card"
 import { Github, Linkedin } from "@/components/icons"
 import { experience, profile, projects, sideProjects } from "@/data/profile"
+import { ElevenMatrixApp } from "./app-11matrix"
 import { cn } from "@/lib/utils"
 import { Dialogue, PixelSprite, Stage, StageTitle } from "./primitives"
 import { EASE, useSceneProgress, useSteppedValue } from "./hooks"
@@ -165,47 +166,18 @@ function QuestCard({
 }
 
 export function StageFirstJob() {
-  const suregem = project("SureGem")
-  const jobs = project("11Jobs")
   return (
     <Stage id="first-job" className="overflow-clip bg-[#121a3a] pb-28">
-      <StageTitle id="first-job" kicker="Hired for the frontend. Handed the whole stack, which is what I wanted anyway." />
+      <StageTitle id="first-job" kicker="Hired for frontend. Got the whole stack. No complaints." />
       <ClassChange />
 
       <div className="mx-auto mt-20 grid max-w-5xl items-center gap-10 px-4 md:grid-cols-2">
         <Dialogue speaker="QUEST 1 · SHOPIFY APPS" tone="green" className="mt-0">
-          A niche start: Shopify app development. Not Shopify websites — apps. Embedded React extensions that live inside a store's admin and talk to Shopify's product and order APIs. It's like working in Next.js, except everything has to fit inside someone else's dashboard. Weird that this exists. It worked well.
+          Shopify apps. Not stores, apps: React that lives inside someone else's admin and talks to their product and order APIs. Weird that this exists. Works great.
         </Dialogue>
         <ShopifyAdminMock />
       </div>
 
-      <div className="mx-auto mt-20 grid max-w-5xl gap-10 px-4 md:grid-cols-2">
-        <QuestCard
-          tag="QUEST 2 · OWNED"
-          title={suregem.name.toUpperCase()}
-          tagline={suregem.tagline}
-          url={suregem.url}
-          urlLabel={suregem.urlLabel}
-          stack={suregem.stack}
-        >
-          A real full-stack product. I worked mainly on the frontend, but I owned the application: I laid
-          out a detailed project structure with conventions and patterns everyone had to follow. An
-          amazing project.
-        </QuestCard>
-        <QuestCard
-          tag="QUEST 3 · FRONT + BACK"
-          title={jobs.name.toUpperCase()}
-          tagline={jobs.tagline}
-          url={jobs.url}
-          urlLabel={jobs.urlLabel}
-          stack={jobs.stack}
-          delay={0.1}
-        >
-          This time I worked on the backend as well: a customizable assessment workflow builder,
-          recruiter and candidate portals, proctoring, and an MCP server so AI can create and manage
-          assessments over chat.
-        </QuestCard>
-      </div>
     </Stage>
   )
 }
@@ -306,13 +278,13 @@ export function StageMatrix() {
   const matrix = project("11Matrix")
   return (
     <Stage id="matrix" className="overflow-clip bg-night pb-28">
-      <StageTitle id="matrix" kicker="The one I'm playing right now." />
+      <StageTitle id="matrix" kicker="Currently playing. Save file: very large." />
       <div className="flex justify-center">
         <Badge className="animate-pulse bg-px-green text-[0.5625rem] text-night">● CURRENTLY PLAYING</Badge>
       </div>
       <MatrixHub />
       <Dialogue speaker="ASHFAQ · NOW" tone="yellow" className="px-4">
-        I own 11Matrix completely. Connect all your Shopify stores, Google Analytics, Pinterest and more in one place, then manage inventory across every store from one screen. I build the React Router frontend, the Go, Gin and PostgreSQL backend, and the MCP layer that lets AI agents drive it too.
+        I own it end to end: React Router up front, Go + Gin + Postgres behind, MCP so AI can run the shop too. Every store, one dashboard, one leaderboard.
       </Dialogue>
       <div className="mt-10 flex flex-wrap justify-center gap-x-5 gap-y-4 px-4">
         {matrix.stack.map((s) => (
@@ -321,20 +293,21 @@ export function StageMatrix() {
           </Badge>
         ))}
       </div>
-      {matrix.url && (
-        <div className="mt-10 flex justify-center">
-          <Button asChild className="bg-px-yellow text-[0.625rem] text-night">
-            <a href={matrix.url} target="_blank" rel="noreferrer">
-              VISIT {matrix.urlLabel?.toUpperCase()} ↗
-            </a>
-          </Button>
-        </div>
-      )}
+      <div className="mt-16 px-4">
+        <ElevenMatrixApp />
+      </div>
     </Stage>
   )
 }
 
 /* --------------------------------- Finale -------------------------------- */
+
+const ONE_LINERS: Record<string, string> = {
+  Fujin: "shadcn, but whole features. npx fujin add, ship, go home.",
+  "Bingo Master": "Bingo meets chess over raw WebSockets. No Socket.IO training wheels.",
+  "Gaming Era": "Chat + WebRTC video for gamers. OAuth hand-rolled, because why not.",
+  "File Scanner": "Upload → queue → scan → live dashboard. Three services, zero panic.",
+}
 
 export function StageContinue() {
   const reduced = useReducedMotion()
@@ -378,7 +351,7 @@ export function StageContinue() {
               stack={sp.stack}
               delay={(i % 2) * 0.1}
             >
-              {sp.highlights[0].replaceAll("`", "")}
+              {ONE_LINERS[sp.name] ?? sp.highlights[0].replaceAll("`", "")}
             </QuestCard>
           ))}
         </div>

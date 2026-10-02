@@ -24,10 +24,13 @@ export const stages: Stage[] = [
   { id: "internship", n: 7, year: "2023", title: "First Internship", blurb: "A no-library drag & drop test, then a trading platform" },
   { id: "ai-era", n: 8, year: "2023", title: "The AI Era", blurb: "MCA, more projects, and goodbye Stack Overflow" },
   { id: "boss", n: 9, year: "2025", title: "Boss Fight", blurb: "Five state-management patterns, one codebase, two days" },
-  { id: "freelance", n: 10, year: "2025", title: "Freelance", blurb: "Laravel backends with AI as a co-pilot" },
-  { id: "first-job", n: 11, year: "2026", title: "Class Change", blurb: "Hired as frontend, levelled up to full-stack" },
-  { id: "matrix", n: 12, year: "Now", title: "11Matrix", blurb: "Every store, every channel, one place" },
-  { id: "continue", n: 13, year: "Next", title: "Continue?", blurb: "Side quests, and player two" },
+  { id: "trypnow", n: 10, year: "2025", title: "TrypNow", blurb: "Drag-and-drop packages and prompt-filled forms" },
+  { id: "freelance", n: 11, year: "2025", title: "Freelance", blurb: "Laravel backends with AI as a co-pilot" },
+  { id: "first-job", n: 12, year: "2026", title: "Class Change", blurb: "Hired as frontend, levelled up to full-stack" },
+  { id: "suregem", n: 13, year: "2026", title: "SureGem", blurb: "A B2B diamond marketplace you can search" },
+  { id: "eleven-jobs", n: 14, year: "2026", title: "11jobs", blurb: "One sentence to the MCP, one whole hiring workflow" },
+  { id: "matrix", n: 15, year: "Now", title: "11Matrix", blurb: "Every store, one dashboard, one leaderboard" },
+  { id: "continue", n: 16, year: "Next", title: "Continue?", blurb: "Side quests, and player two" },
 ]
 
 export const stageById = (id: string): Stage => {

@@ -2,8 +2,9 @@
 
 Personal portfolio and résumé site. The home page is a scroll-driven pixel-art
 "game" of my developer journey: it boots on a 3D CRT computer, dives into Turbo
-C++, and plays through thirteen stages from 2018 to today, several of them
-playable. The `/resume` page stays a clean, printable document.
+C++, and plays through sixteen stages from 2018 to today, several of them
+playable. The recent products (TrypNow, SureGem, 11jobs, 11Matrix) each "boot"
+in a browser window and run as clickable demos on fake data. The `/resume` page stays a clean, printable document.
 
 React + TypeScript + Vite, styled with Tailwind CSS v4, pixel components from
 [8bitcn](https://8bitcn.com), animated with Motion.
@@ -75,6 +76,8 @@ src/
 │  │  ├─ hud.tsx              # top bar, XP bar, stage select
 │  │  ├─ scene-intro.tsx      # 3D CRT desk, camera dive into the screen
 │  │  ├─ stage-*.tsx          # one file per chapter of the story
+│  │  ├─ app-window.tsx       # browser frame that boots a demo (terminal → app)
+│  │  ├─ app-*.tsx            # TrypNow, SureGem, 11jobs and 11Matrix demos
 │  │  ├─ primitives.tsx       # Stage, StageTitle, Dialogue, Achievement, PixelSprite
 │  │  ├─ hooks.ts             # scroll-scene progress, typewriter
 │  │  └─ sprites.ts           # pixel sprites as character grids
@@ -100,6 +103,12 @@ src/
 - **Playable bits** — love calculator, snake (keyboard, swipe or D-pad),
   tic-tac-toe, the no-library drag-and-drop calculator, and the paper-trading
   sim where closing the tab shows the original target-check bug.
+- **Product demos** — TrypNow's drag-and-drop package builder and prompt-to-form
+  AI listing; SureGem's diamond search, detail drawer, cart and supplier upload;
+  11jobs' MCP chat that builds a whole hiring workflow from one sentence (the
+  prompt is parsed, so edits change the result) plus a proctored candidate view;
+  11Matrix's KPI tiles, re-ranking store leaderboard and cross-store inventory.
+  All data is fake and generated in the browser.
 - **Palette** — a fixed night palette scoped to `.pixel-world`, with each stage
   painting its own era (Borland blue, Android green, …). 8bitcn components read
   the same tokens.
@@ -143,7 +152,7 @@ Vendor code is split so the entry chunk stays small, and `/resume` and the 404
 page are lazy-loaded:
 
 ```
-index   ~162 kB  (51 kB gzip)   app code, including the journey
+index   ~211 kB  (65 kB gzip)   app code, including the journey and demos
 react   ~220 kB  (70 kB gzip)   react + react-dom + router
 motion  ~142 kB  (47 kB gzip)   animation runtime
 resume    ~9 kB   (2 kB gzip)   loaded on demand

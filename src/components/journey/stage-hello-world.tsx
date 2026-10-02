@@ -81,9 +81,9 @@ function TurboWindow({
 }
 
 const CAPTIONS = [
-  "2018, Class 11. I picked Computer Science, which meant C++ on Turbo C++. Blue screen, yellow text, no mouse.",
-  "Alt+F9 to compile. Zero errors. (That never happened again.)",
-  "Ctrl+F9 to run, and there it was: Hello World. I was hooked.",
+  "2018. Class 11. C++ on Turbo C++. No mouse, no internet, no problem.",
+  "Alt+F9. Zero errors. Peak of my career, honestly.",
+  "Ctrl+F9. Hello World. Hooked for life.",
 ]
 
 function HelloWorldScene() {
@@ -429,11 +429,11 @@ function LoveCalculator() {
 export function StageHelloWorld() {
   return (
     <Stage id="hello-world" className="overflow-clip bg-tc-blue">
-      <StageTitle id="hello-world" kicker="My first contact with a computer that did what I told it to." />
+      <StageTitle id="hello-world" kicker="Class 11. A blue screen. A blinking cursor. Destiny." />
       <HelloWorldScene />
       <div className="pb-24 pt-10">
         <Dialogue speaker="ASHFAQ · 2018" tone="yellow" className="mb-12 px-4">
-          The first program I actually built: a love calculator. Type two names, cancel out the letters they share, do some very serious maths, print a percentage. Every friend in class got tested. Try it.
+          First real program: a love calculator. Cancel shared letters, do "maths", print a %. Peer-reviewed by the entire class. Your turn.
         </Dialogue>
         <LoveCalculator />
       </div>

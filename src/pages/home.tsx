@@ -13,12 +13,13 @@ import { StageFullStack, StageWeb } from "@/components/journey/stage-web"
 import { StageInternship } from "@/components/journey/stage-internship"
 import { StageAiEra, StageBoss, StageFreelance } from "@/components/journey/stage-boss"
 import { StageContinue, StageFirstJob, StageMatrix } from "@/components/journey/stage-job"
+import { StageElevenJobs, StageSureGem, StageTrypNow } from "@/components/journey/stage-apps"
 
 export default function Home() {
   useDocumentMeta({
     title: "Mohammad Ashfaq — Full-Stack Developer",
     description:
-      "A scroll-through game of my developer journey: from Turbo C++ and a love calculator in 2018 to owning 11Matrix, a multi-store commerce platform, today.",
+      "A scroll-through game of my developer journey: from Turbo C++ in 2018 to running live demos of TrypNow, SureGem, 11jobs and 11Matrix today.",
     path: "/",
   })
 
@@ -35,8 +36,11 @@ export default function Home() {
       <StageInternship />
       <StageAiEra />
       <StageBoss />
+      <StageTrypNow />
       <StageFreelance />
       <StageFirstJob />
+      <StageSureGem />
+      <StageElevenJobs />
       <StageMatrix />
       <StageContinue />
     </div>

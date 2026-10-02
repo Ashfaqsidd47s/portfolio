@@ -417,10 +417,10 @@ function TradingSim() {
 }
 
 const REVIEW_NOTES = [
-  { text: "State management: one useContext, for the entire app.", color: "bg-px-yellow", rot: "-rotate-2" },
-  { text: "Target & stop-loss checked inside the frontend's WebSocket listener. Close the tab and nothing gets recorded.", color: "bg-px-pink", rot: "rotate-1" },
-  { text: "Architecture? Who cares, it works!", color: "bg-px-cyan", rot: "-rotate-1" },
-  { text: "Seniors to ask for a review: 0", color: "bg-px-green", rot: "rotate-2" },
+  { text: "State management: one useContext. For everything.", color: "bg-px-yellow", rot: "-rotate-2" },
+  { text: "Trade logic in the frontend. Close tab = trade lives forever.", color: "bg-px-pink", rot: "rotate-1" },
+  { text: "Architecture: it works on my machine.", color: "bg-px-cyan", rot: "-rotate-1" },
+  { text: "Code reviewers: 0. Confidence: 100.", color: "bg-px-green", rot: "rotate-2" },
 ]
 
 function FutureMeReview() {
@@ -449,9 +449,9 @@ function FutureMeReview() {
 export function StageInternship() {
   return (
     <Stage id="internship" className="overflow-clip bg-[#10162e] pb-28">
-      <StageTitle id="internship" kicker="My first remote internship. First, the selection test." />
+      <StageTitle id="internship" kicker="First remote internship. First, the selection test." />
       <Dialogue speaker="ASHFAQ · 2023" tone="cyan" className="mb-12 px-4">
-        The assignment: build an election app and a drag-and-drop calculator. I did the drag and drop without any library, and with no ChatGPT either. It wasn't popular yet and I didn't even know it existed. Both are rebuilt below, so try them.
+        The test: an election app and a drag-and-drop calculator. No DnD library. No ChatGPT (I didn't know it existed). Just DOM events and confidence.
       </Dialogue>
       <div className="mx-auto grid max-w-5xl gap-10 px-4 md:grid-cols-2">
         <ElectionApp />
@@ -466,11 +466,11 @@ export function StageInternship() {
 
       <div className="mt-28">
         <Dialogue speaker="ASHFAQ · 2023" tone="pink" className="mb-12 px-4">
-          My first real project: an options paper-trading platform. Live market data comes in, you set a target and a stop-loss, and when either hits, it's written to the database. I was so confident. Everything worked.
+          First real project: options paper trading. Live feed in, target or stop-loss hits, write to DB. What could possibly go wrong?
         </Dialogue>
         <TradingSim />
         <Dialogue speaker="ASHFAQ · NOW" tone="yellow" className="mt-16 px-4">
-          Try closing the tab in V1. I was checking the target in the frontend's WebSocket listener, so it only "hit" while someone had the page open. I fixed it later by moving the check to the server. The client never noticed. It was working amazingly, and there was no senior around to tell me otherwise.
+          Close the tab in V1. The target check lived in the browser, so no tab meant no trade closing: Schrödinger's stop-loss. Moved it server-side later. The client never noticed.
         </Dialogue>
         <FutureMeReview />
       </div>
