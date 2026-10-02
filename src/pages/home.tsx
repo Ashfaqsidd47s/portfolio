@@ -5,6 +5,7 @@ import "@fontsource/pixelify-sans/latin-400.css"
 import "@fontsource/pixelify-sans/latin-600.css"
 import { useDocumentMeta } from "@/hooks/use-document-meta"
 import { Hud } from "@/components/journey/hud"
+import { CompanionProvider } from "@/components/journey/companion"
 import { SceneIntro } from "@/components/journey/scene-intro"
 import { StageHelloWorld } from "@/components/journey/stage-hello-world"
 import { StageSnake } from "@/components/journey/stage-snake"
@@ -24,24 +25,26 @@ export default function Home() {
   })
 
   return (
-    <div className="pixel-world">
-      <Hud />
-      <SceneIntro />
-      <StageHelloWorld />
-      <StageSnake />
-      <StageAndroid />
-      <StageWeb />
-      <StageFullStack />
-      <StageInternship />
-      <StageAiEra />
-      <StageBoss />
-      <StageTrypNow />
-      <StageFreelance />
-      <StageFirstJob />
-      <StageSureGem />
-      <StageElevenJobs />
-      <StageMatrix />
-      <StageContinue />
-    </div>
+    <CompanionProvider>
+      <div className="pixel-world">
+        <Hud />
+        <SceneIntro />
+        <StageHelloWorld />
+        <StageSnake />
+        <StageAndroid />
+        <StageWeb />
+        <StageFullStack />
+        <StageInternship />
+        <StageAiEra />
+        <StageBoss />
+        <StageTrypNow />
+        <StageFreelance />
+        <StageFirstJob />
+        <StageSureGem />
+        <StageElevenJobs />
+        <StageMatrix />
+        <StageContinue />
+      </div>
+    </CompanionProvider>
   )
 }

@@ -79,3 +79,32 @@ export const STAR: Sprite = {
   palette: { Y: "#ffd23f" },
   rows: ["..Y..", "..Y..", "YYYYY", ".YYY.", "Y...Y"],
 }
+
+const face = (eyes: string, mouth: string): Sprite => ({
+  palette: HERO_PALETTE,
+  rows: [
+    "...KKKKKK...",
+    "..KKKKKKKK..",
+    ".KKKKKKKKKK.",
+    ".KKSSSSSSKK.",
+    eyes,
+    "..SSSSSSSS..",
+    mouth,
+    "....SSSS....",
+    "..HHHHHHHH..",
+    ".HHHhHHhHHH.",
+    ".SHHhHHhHHS.",
+    ".SHHHHHHHHS.",
+    "..JJJJJJJJ..",
+    "..JJJ..JJJ..",
+    "..BBB..BBB..",
+  ],
+})
+
+/** The companion's faces: idle, talking (mouth open), and mid-blink. */
+export const COMPANION = {
+  idle: face("..SWKSSWKS..", "...SSMMSS..."),
+  talk: face("..SWKSSWKS..", "...SMKKMS..."),
+  blink: face("..SKKSSKKS..", "...SSMMSS..."),
+  blinkTalk: face("..SKKSSKKS..", "...SMKKMS..."),
+}

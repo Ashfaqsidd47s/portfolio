@@ -275,7 +275,10 @@ export function StageFreelance() {
   return (
     <Stage id="freelance" className="overflow-clip bg-night pb-28">
       <StageTitle id="freelance" kicker="After that codebase, clean MVC felt like a spa day." />
-      <div className="mx-auto grid max-w-5xl items-center gap-10 px-4 md:grid-cols-[1.2fr_1fr]">
+      <div className="mx-auto flex max-w-3xl flex-col gap-10 px-4">
+        <Dialogue speaker="ASHFAQ · 2025" tone="cyan" className="mt-0">
+          Freelance Laravel backends. Nice code, zero drama. I'd seen enough chaos.
+        </Dialogue>
         <motion.div
           className="border-4 border-night bg-[#1e1b3a] shadow-[10px_12px_0_rgb(0_0_0/0.45)]"
           initial={reduced ? false : { opacity: 0, x: -40 }}
@@ -295,14 +298,9 @@ export function StageFreelance() {
             Illustrative snippet, not client code.
           </p>
         </motion.div>
-        <div className="flex flex-col gap-6">
-          <Dialogue speaker="ASHFAQ · 2025" tone="cyan" className="mt-0">
-            Freelance Laravel backends. Nice code, zero drama. I'd seen enough chaos.
-          </Dialogue>
-          <Dialogue speaker="ASHFAQ · 2025" tone="green" className="mt-0">
-            AI was everywhere now. Know the concepts, let the robot type. Agents were still in beta, vibes were not.
-          </Dialogue>
-        </div>
+        <Dialogue speaker="ASHFAQ · 2025" tone="green" className="mt-0">
+          AI was everywhere now. Know the concepts, let the robot type. Agents were still in beta, vibes were not.
+        </Dialogue>
       </div>
     </Stage>
   )

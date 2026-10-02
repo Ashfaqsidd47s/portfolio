@@ -17,7 +17,7 @@ import { STAR } from "./sprites"
 
 type Faces = Partial<Record<"front" | "back" | "left" | "right" | "top" | "bottom", React.ReactNode>>
 
-function Box({
+export function Box({
   w,
   h,
   d,
@@ -27,6 +27,7 @@ function Box({
   color,
   faces = {},
   className,
+  faceClassName = "border-[3px] border-[#1b1430]",
   style,
 }: {
   w: number
@@ -39,9 +40,11 @@ function Box({
   color: { front: string; side: string; top: string }
   faces?: Faces
   className?: string
+  /** Outline for every face; the pixel-era default is a chunky dark border. */
+  faceClassName?: string
   style?: React.ComponentProps<typeof motion.div>["style"]
 }) {
-  const face = "absolute left-0 top-0 border-[3px] border-[#1b1430] backface-hidden"
+  const face = cn("absolute left-0 top-0 backface-hidden", faceClassName)
   const sides: Array<{
     key: keyof Faces
     width: number

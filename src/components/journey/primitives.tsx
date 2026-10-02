@@ -2,7 +2,8 @@ import * as React from "react"
 import { motion, useInView, useReducedMotion } from "motion/react"
 import { stageById } from "@/data/journey"
 import { cn } from "@/lib/utils"
-import { EASE, useTypewriter } from "./hooks"
+import { useSay, type Tone } from "./companion-context"
+import { EASE } from "./hooks"
 import { TROPHY } from "./sprites"
 
 /* ------------------------------------------------------------------------- */
@@ -38,17 +39,53 @@ export function StageTitle({
   kicker,
   className,
   tone = "light",
+  variant = "pixel",
 }: {
   id: string
   kicker?: string
   className?: string
   tone?: "light" | "dark"
+  /** "ide": the post-pixel look — code comment eyebrow, clean sans headline. */
+  variant?: "pixel" | "ide"
 }) {
   const stage = stageById(id)
   const reduced = useReducedMotion()
   const ref = React.useRef<HTMLDivElement>(null)
   const inView = useInView(ref, { once: true, amount: 0.6 })
   const show = reduced || inView
+
+  if (variant === "ide") {
+    return (
+      <div ref={ref} className={cn("relative mx-auto max-w-5xl px-4 py-16 sm:py-24", className)}>
+        <motion.p
+          className="font-mono text-xs text-[#808080] sm:text-sm"
+          initial={reduced ? false : { opacity: 0 }}
+          animate={show ? { opacity: 1 } : undefined}
+        >
+          {"// "}stage {String(stage.n).padStart(2, "0")} · {stage.year}
+        </motion.p>
+        <motion.h2
+          className="mt-3 font-sans text-[clamp(2rem,6vw,4rem)] font-semibold leading-[1.05] tracking-tight text-[#e8eaed]"
+          initial={reduced ? false : { opacity: 0, y: 24 }}
+          animate={show ? { opacity: 1, y: 0 } : undefined}
+          transition={{ duration: 0.6, ease: EASE }}
+        >
+          {stage.title}
+          <span className="text-[#3ddc84]">.</span>
+        </motion.h2>
+        {kicker && (
+          <motion.p
+            className="mt-4 max-w-xl text-pretty font-sans text-lg text-[#a9b7c6] sm:text-xl"
+            initial={reduced ? false : { opacity: 0, y: 12 }}
+            animate={show ? { opacity: 1, y: 0 } : undefined}
+            transition={{ duration: 0.6, ease: EASE, delay: 0.15 }}
+          >
+            {kicker}
+          </motion.p>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div
@@ -107,59 +144,33 @@ export function StageTitle({
 /* ------------------------------------------------------------------------- */
 
 /**
- * RPG / visual-novel dialogue box. The full line is always in the DOM for
- * screen readers and search; the typed copy on top is decorative.
+ * A line of narration. Nothing renders in the flow except a screen-reader copy;
+ * when this spot reaches the middle of the viewport, the companion says it.
  */
 export function Dialogue({
   speaker,
   children,
-  className,
   tone = "pink",
 }: {
   speaker: string
   children: string
+  /** Kept for call-site compatibility; the line no longer takes up layout. */
   className?: string
-  tone?: "pink" | "cyan" | "yellow" | "green"
+  tone?: Tone
 }) {
   const ref = React.useRef<HTMLDivElement>(null)
-  const inView = useInView(ref, { once: true, amount: 0.8 })
-  const { shown, done } = useTypewriter(children, inView)
-  const toneClass = {
-    pink: "bg-px-pink text-night",
-    cyan: "bg-px-cyan text-night",
-    yellow: "bg-px-yellow text-night",
-    green: "bg-px-green text-night",
-  }[tone]
+  const inView = useInView(ref, { margin: "-40% 0px -40% 0px" })
+  const say = useSay()
+
+  React.useEffect(() => {
+    if (inView) say({ speaker, text: children, tone })
+  }, [inView, say, speaker, children, tone])
 
   return (
-    <div ref={ref} className={cn("relative mx-auto mt-6 w-full max-w-2xl", className)}>
-      <span
-        className={cn(
-          "retro absolute -top-3 left-5 z-10 px-2 py-1 text-[0.5625rem] sm:text-[0.625rem]",
-          toneClass
-        )}
-      >
-        {speaker}
-      </span>
-      <div className="px-frame-shadow relative bg-ink/95 px-5 pb-6 pt-6 sm:px-7">
-        <p className="sr-only">{children}</p>
-        <p
-          aria-hidden
-          className="relative min-h-[3lh] text-pretty font-pixel-sans text-lg leading-relaxed text-cream sm:text-xl"
-        >
-          {/* Invisible full copy reserves the final height so nothing jumps. */}
-          <span className="invisible">{children}</span>
-          <span className="absolute inset-0">{shown}</span>
-        </p>
-        {done && (
-          <span
-            aria-hidden
-            className="animate-blink absolute bottom-2 right-4 text-xs text-px-yellow"
-          >
-            ▼
-          </span>
-        )}
-      </div>
+    <div ref={ref} className="h-px w-full">
+      <p className="sr-only">
+        {speaker}: {children}
+      </p>
     </div>
   )
 }

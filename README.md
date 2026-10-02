@@ -75,6 +75,8 @@ src/
 │  ├─ journey/                # the home-page game
 │  │  ├─ hud.tsx              # top bar, XP bar, stage select
 │  │  ├─ scene-intro.tsx      # 3D CRT desk, camera dive into the screen
+│  │  ├─ era-shift.tsx        # CRT → 2020 laptop hardware upgrade between eras
+│  │  ├─ companion.tsx        # pixel-me narrator, fixed bottom-left
 │  │  ├─ stage-*.tsx          # one file per chapter of the story
 │  │  ├─ app-window.tsx       # browser frame that boots a demo (terminal → app)
 │  │  ├─ app-*.tsx            # TrypNow, SureGem, 11jobs and 11Matrix demos
@@ -96,6 +98,17 @@ src/
 ## Design notes
 
 ### The journey (`/`)
+
+- **Eras** — each era of the story lives in the tools of its time. The pixel
+  Turbo C++ era hands over to the Android Studio era through a camera pull-back:
+  the CRT powers off, a laptop rises, opens, boots the IDE and the camera dives
+  into its screen. The Android stage is a Darcula-style IDE (Gradle sync, code
+  typing, build, emulator running the app, then the emulator crashing), all
+  scrubbed by scroll. Later eras follow the same recipe.
+- **Companion** — all narration is spoken by a pixel version of me parked
+  bottom-left like a chat widget: he hops, blinks and talks while typing each
+  line into a speech bubble. `<Dialogue>` marks where a line triggers; the full
+  text stays in the DOM for screen readers and search.
 
 - **Pinned scenes** — the intro, the Turbo C++ editor, HTML → CSS → JS, the boss
   fight and the 11Matrix hub are tall sections with a sticky viewport, scrubbed
