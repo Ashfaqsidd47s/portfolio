@@ -32,6 +32,8 @@ function RouteFallback() {
 
 export default function App() {
   const location = useLocation()
+  // The home page is a self-contained game with its own HUD and ending.
+  const isJourney = location.pathname === "/"
 
   return (
     <>
@@ -41,8 +43,12 @@ export default function App() {
       >
         Skip to content
       </a>
-      <ScrollProgress />
-      <Nav />
+      {!isJourney && (
+        <>
+          <ScrollProgress />
+          <Nav />
+        </>
+      )}
       <div id="main">
         <Suspense fallback={<RouteFallback />}>
           <AnimatePresence mode="wait">
@@ -75,7 +81,7 @@ export default function App() {
           </AnimatePresence>
         </Suspense>
       </div>
-      <Footer />
+      {!isJourney && <Footer />}
     </>
   )
 }

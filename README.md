@@ -1,7 +1,12 @@
 # Mohammad Ashfaq — Portfolio
 
-Personal portfolio and résumé site. React + TypeScript + Vite, styled with
-Tailwind CSS v4 and shadcn-style components, animated with Motion.
+Personal portfolio and résumé site. The home page is a scroll-driven pixel-art
+"game" of my developer journey: it boots on a 3D CRT computer, dives into Turbo
+C++, and plays through thirteen stages from 2018 to today, several of them
+playable. The `/resume` page stays a clean, printable document.
+
+React + TypeScript + Vite, styled with Tailwind CSS v4, pixel components from
+[8bitcn](https://8bitcn.com), animated with Motion.
 
 ## ⚠️ Before you deploy
 
@@ -28,7 +33,9 @@ missing value degrades the metadata rather than breaking the build.
 | Framework  | React 19 + TypeScript, Vite                  |
 | Styling    | Tailwind CSS v4 (CSS-first `@theme` tokens)  |
 | Components | shadcn/ui primitives (Radix under the hood)  |
-| Animation  | Motion (`motion/react`)                      |
+| Pixel UI   | 8bitcn components, vendored in `ui/8bit/`    |
+| Fonts      | Press Start 2P, Pixelify Sans, VT323 — self-hosted via Fontsource |
+| Animation  | Motion (`motion/react`), CSS 3D transforms   |
 | Routing    | React Router, with lazy secondary routes     |
 | Icons      | lucide-react, plus local brand marks         |
 
@@ -44,9 +51,13 @@ npm run lint     # oxlint
 
 ## Editing content
 
-All copy lives in one place — [`src/data/profile.ts`](src/data/profile.ts).
-Experience, projects, skills, education and contact details are typed objects
-consumed by the home page and the résumé page, so an edit there updates both.
+Facts live in [`src/data/profile.ts`](src/data/profile.ts): experience,
+projects, skills, education and contact details. Both the journey and the
+résumé read from it, so a project link or stack edited there updates both.
+
+The journey's timeline — each stage's year, title and stage-select blurb —
+lives in [`src/data/journey.ts`](src/data/journey.ts). The narration itself is
+written inline in each stage component under `src/components/journey/`.
 
 To swap the downloadable PDF, replace `public/Mohammad_Ashfaq_Resume.pdf` and
 update `profile.resumeFile` / `profile.resumeFileName` if the name changes.
@@ -56,13 +67,21 @@ update `profile.resumeFile` / `profile.resumeFileName` if the name changes.
 ```
 src/
 ├─ data/profile.ts            # single source of truth for all content
+├─ data/journey.ts            # stage order, years and titles
 ├─ components/
-│  ├─ ui/                     # shadcn primitives (button, badge)
-│  ├─ sections/               # hero, experience, projects, about, contact
-│  ├─ motion-primitives.tsx   # Reveal / StaggerGroup / MaskedWords
-│  ├─ nav.tsx, footer.tsx, section.tsx, icons.tsx
+│  ├─ ui/                     # shadcn primitives (button, badge, card)
+│  │  └─ 8bit/                # vendored 8bitcn components (MIT)
+│  ├─ journey/                # the home-page game
+│  │  ├─ hud.tsx              # top bar, XP bar, stage select
+│  │  ├─ scene-intro.tsx      # 3D CRT desk, camera dive into the screen
+│  │  ├─ stage-*.tsx          # one file per chapter of the story
+│  │  ├─ primitives.tsx       # Stage, StageTitle, Dialogue, Achievement, PixelSprite
+│  │  ├─ hooks.ts             # scroll-scene progress, typewriter
+│  │  └─ sprites.ts           # pixel sprites as character grids
+│  ├─ motion-primitives.tsx   # Reveal (résumé / footer)
+│  ├─ nav.tsx, footer.tsx, icons.tsx   # chrome for /resume and 404
 ├─ pages/
-│  ├─ home.tsx                # /
+│  ├─ home.tsx                # / — the journey
 │  ├─ resume.tsx              # /resume — web résumé + PDF download + print
 │  └─ not-found.tsx           # catch-all
 ├─ hooks/
@@ -72,6 +91,26 @@ src/
 ```
 
 ## Design notes
+
+### The journey (`/`)
+
+- **Pinned scenes** — the intro, the Turbo C++ editor, HTML → CSS → JS, the boss
+  fight and the 11Matrix hub are tall sections with a sticky viewport, scrubbed
+  by scroll progress. Everything else animates in once as it enters the view.
+- **Playable bits** — love calculator, snake (keyboard, swipe or D-pad),
+  tic-tac-toe, the no-library drag-and-drop calculator, and the paper-trading
+  sim where closing the tab shows the original target-check bug.
+- **Palette** — a fixed night palette scoped to `.pixel-world`, with each stage
+  painting its own era (Borland blue, Android green, …). 8bitcn components read
+  the same tokens.
+- **Accessibility** — every typed-out line is also in the DOM in full for screen
+  readers and search; under `prefers-reduced-motion` the pinned scenes collapse
+  to one screen in their finished state and nothing types or scrubs.
+- **Gotchas** — stages use `overflow-clip`, never `overflow-hidden`, which would
+  break `position: sticky`. Scroll-linked opacity uses function transforms
+  (`ramp` in `hooks.ts`) so Motion keeps it on the JS path.
+
+### Résumé (`/resume`)
 
 - **Palette** — cool neutral base with a single emerald accent, used sparingly
   (eyebrows, links, badges, the availability dot). Tokens are defined once on
@@ -104,7 +143,7 @@ Vendor code is split so the entry chunk stays small, and `/resume` and the 404
 page are lazy-loaded:
 
 ```
-index    ~79 kB  (24 kB gzip)   app code
+index   ~162 kB  (51 kB gzip)   app code, including the journey
 react   ~220 kB  (70 kB gzip)   react + react-dom + router
 motion  ~142 kB  (47 kB gzip)   animation runtime
 resume    ~9 kB   (2 kB gzip)   loaded on demand

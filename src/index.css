@@ -91,6 +91,41 @@
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --color-card: var(--card, var(--elevated));
+  --color-card-foreground: var(--card-foreground, var(--foreground));
+}
+
+/* ---------------------------------------------------------------------------
+   Pixel world — the scroll journey on the home page. A fixed night palette:
+   each stage paints its own era (Turbo C++ blue, Android green, …) on top.
+--------------------------------------------------------------------------- */
+@theme {
+  --font-pixel: "Press Start 2P", ui-monospace, monospace;
+  --font-pixel-sans: "Pixelify Sans", "VT323", ui-sans-serif, system-ui, sans-serif;
+  --font-terminal: "VT323", ui-monospace, monospace;
+
+  --color-night: #0b0a1f;
+  --color-ink: #17153a;
+  --color-ink-2: #221f4d;
+  --color-cream: #f6eedd;
+  --color-lilac: #b9b3d6;
+  --color-px-pink: #ff4d8d;
+  --color-px-cyan: #3ee6ff;
+  --color-px-yellow: #ffd23f;
+  --color-px-green: #4dff88;
+  --color-px-red: #ff5a4f;
+  --color-px-orange: #ff9a3c;
+  --color-px-purple: #9b7bff;
+
+  /* Borland Turbo C++ / BGI 16-colour palette */
+  --color-tc-blue: #0000aa;
+  --color-tc-cyan: #00aaaa;
+  --color-tc-gray: #aaaaaa;
+  --color-tc-yellow: #ffff55;
+  --color-tc-white: #ffffff;
+  --color-tc-green: #55ff55;
+  --color-tc-red: #ff5555;
 }
 
 @layer base {
@@ -179,6 +214,97 @@
   }
   .link-underline:hover { background-size: 100% 1px; }
 }
+
+@layer base {
+  .pixel-world {
+    --background: #0b0a1f;
+    --foreground: #f6eedd;
+    --primary: #ffd23f;
+    --primary-foreground: #1a1033;
+    --ring: #f6eedd;
+    --card: #17153a;
+    --card-foreground: #f6eedd;
+    --muted: #221f4d;
+    --muted-foreground: #b9b3d6;
+    --subtle-foreground: #9d97c4;
+    --surface: #17153a;
+    --border: #3a3570;
+    --border-strong: #5a54a0;
+    --accent: #ff4d8d;
+    --accent-foreground: #1a1033;
+    color-scheme: dark;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-pixel-sans);
+    /* Pixelify's fi / fl ligatures read as "A" at small sizes. */
+    font-variant-ligatures: no-common-ligatures;
+  }
+}
+
+@layer utilities {
+  /* Stepped, notched-corner pixel frame. Set --px-frame to recolour. */
+  .px-frame {
+    box-shadow:
+      0 -4px 0 0 var(--px-frame, var(--color-cream)),
+      0 4px 0 0 var(--px-frame, var(--color-cream)),
+      -4px 0 0 0 var(--px-frame, var(--color-cream)),
+      4px 0 0 0 var(--px-frame, var(--color-cream));
+  }
+  .px-frame-shadow {
+    box-shadow:
+      0 -4px 0 0 var(--px-frame, var(--color-cream)),
+      0 4px 0 0 var(--px-frame, var(--color-cream)),
+      -4px 0 0 0 var(--px-frame, var(--color-cream)),
+      4px 0 0 0 var(--px-frame, var(--color-cream)),
+      8px 12px 0 0 rgb(0 0 0 / 0.45);
+  }
+
+  /* CRT scanlines + vignette, layered over a screen. Needs a positioned element. */
+  .crt { isolation: isolate; }
+  .crt::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    background:
+      repeating-linear-gradient(to bottom, rgb(0 0 0 / 0.18) 0 1px, transparent 1px 3px),
+      radial-gradient(ellipse at center, transparent 60%, rgb(0 0 0 / 0.45) 100%);
+  }
+
+  /* Anime speed lines radiating from the centre. */
+  .speedlines {
+    background: repeating-conic-gradient(
+      from 0deg at 50% 50%,
+      transparent 0deg 4deg,
+      rgb(255 255 255 / 0.07) 4deg 5deg
+    );
+    mask-image: radial-gradient(circle at center, transparent 18%, #000 70%);
+  }
+
+  .pixel-text-shadow { text-shadow: 3px 3px 0 rgb(0 0 0 / 0.6); }
+  .pixelated { image-rendering: pixelated; image-rendering: crisp-edges; }
+  .preserve-3d { transform-style: preserve-3d; }
+  .backface-hidden { backface-visibility: hidden; }
+
+  .animate-blink { animation: px-blink 1s step-end infinite; }
+  .animate-bob { animation: px-bob 2.4s ease-in-out infinite; }
+  .animate-twinkle { animation: px-twinkle 3s ease-in-out infinite; }
+  .animate-flicker { animation: px-flicker 4s linear infinite; }
+  .animate-marquee { animation: px-marquee 30s linear infinite; }
+  .animate-spin-slow { animation: spin 40s linear infinite; }
+}
+
+@keyframes px-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes px-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes px-twinkle { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@keyframes px-flicker {
+  0%, 92%, 100% { opacity: 1; }
+  93% { opacity: 0.75; }
+  95% { opacity: 1; }
+  97% { opacity: 0.85; }
+}
+@keyframes px-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
 /* Slim, unobtrusive scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
