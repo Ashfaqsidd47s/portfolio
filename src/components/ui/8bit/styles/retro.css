@@ -1,0 +1,14 @@
+/*
+ * Vendored from 8bitcn (https://8bitcn.com, MIT). The Press Start 2P font is
+ * loaded once from index.html instead of an @import here.
+ */
+.retro {
+  font-family: "Press Start 2P", ui-monospace, system-ui, sans-serif;
+  line-height: 1.5;
+  letter-spacing: 0.5px;
+}
+
+.pixelated {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
