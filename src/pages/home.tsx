@@ -18,10 +18,10 @@ import { StageElevenJobs, StageSureGem, StageTrypNow } from "@/components/journe
 
 export default function Home() {
   useDocumentMeta({
-    title: "Mohammad Ashfaq — Full-Stack Developer",
+    title: "Journey.exe — Mohammad Ashfaq",
     description:
       "A scroll-through game of my developer journey: from Turbo C++ in 2018 to running live demos of TrypNow, SureGem, 11jobs and 11Matrix today.",
-    path: "/",
+    path: "/journey",
   })
 
   return (

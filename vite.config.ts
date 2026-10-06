@@ -2,10 +2,13 @@ import path from "node:path"
 import { defineConfig, loadEnv, type Plugin } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
+import { windowAppPaths } from "./src/os/registry/apps-meta.ts"
 
 /** Routes that should appear in the sitemap, with their relative priority. */
 const ROUTES = [
   { path: "/", priority: "1.0", changefreq: "monthly" },
+  ...windowAppPaths.map((path) => ({ path, priority: "0.7", changefreq: "monthly" })),
+  { path: "/journey", priority: "0.8", changefreq: "monthly" },
   { path: "/resume", priority: "0.8", changefreq: "monthly" },
 ]
 

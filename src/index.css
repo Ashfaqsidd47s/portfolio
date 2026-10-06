@@ -118,6 +118,18 @@
   --color-px-orange: #ff9a3c;
   --color-px-purple: #9b7bff;
 
+  /* TrypNow — the product keeps its own light brand palette in every theme */
+  --color-tn-ink: #0f3b38;
+  --color-tn-teal: #0f766e;
+  --color-tn-accent: #5eead4;
+  --color-tn-muted: #5b7370;
+  --color-tn-faint: #9ab3af;
+  --color-tn-line: #e3ecea;
+  --color-tn-line-2: #cfe3df;
+  --color-tn-soft: #f1f8f7;
+  --color-tn-mint: #e3f3f0;
+  --color-tn-bg: #f6fbfa;
+
   /* Borland Turbo C++ / BGI 16-colour palette */
   --color-tc-blue: #0000aa;
   --color-tc-cyan: #00aaaa;
@@ -344,4 +356,44 @@
     background: transparent !important;
     color: #222 !important;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   OS — the desktop and phone shells. Wallpaper colours are tokens so the
+   theme toggle repaints the hills; text never sits on the wallpaper itself.
+--------------------------------------------------------------------------- */
+.os-wallpaper {
+  --wp-sky-top: #f6f1e6;
+  --wp-sky-bottom: #ece2cd;
+  --wp-sun: #f3c27a;
+  --wp-hill-1: #d6c6a4;
+  --wp-hill-2: #b3b68c;
+  --wp-hill-3: #869c72;
+  --wp-stars: 0;
+  background: linear-gradient(to bottom, var(--wp-sky-top), var(--wp-sky-bottom));
+}
+
+.dark .os-wallpaper {
+  --wp-sky-top: #0d1120;
+  --wp-sky-bottom: #1b2236;
+  --wp-sun: #e9e4d4;
+  --wp-hill-1: #273049;
+  --wp-hill-2: #1d2539;
+  --wp-hill-3: #141a2a;
+  --wp-stars: 1;
+}
+
+.os-stars {
+  opacity: calc(var(--wp-stars) * 0.7);
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 27% 8%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 41% 22%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 56% 12%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 68% 30%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 79% 6%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 91% 24%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 6% 34%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 34% 36%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 62% 4%, #fff 50%, transparent 51%);
 }
