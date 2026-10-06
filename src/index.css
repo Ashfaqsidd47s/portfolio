@@ -363,17 +363,21 @@
    theme toggle repaints the hills; text never sits on the wallpaper itself.
 --------------------------------------------------------------------------- */
 .os-wallpaper {
+  --wp-stars: 0;
+  background: linear-gradient(to bottom, var(--wp-sky-top), var(--wp-sky-bottom));
+}
+
+/* Doon hills */
+.wp-hills {
   --wp-sky-top: #f6f1e6;
   --wp-sky-bottom: #ece2cd;
   --wp-sun: #f3c27a;
   --wp-hill-1: #d6c6a4;
   --wp-hill-2: #b3b68c;
   --wp-hill-3: #869c72;
-  --wp-stars: 0;
-  background: linear-gradient(to bottom, var(--wp-sky-top), var(--wp-sky-bottom));
+  --wp-glow: #f3c27a;
 }
-
-.dark .os-wallpaper {
+.dark .wp-hills {
   --wp-sky-top: #0d1120;
   --wp-sky-bottom: #1b2236;
   --wp-sun: #e9e4d4;
@@ -381,6 +385,74 @@
   --wp-hill-2: #1d2539;
   --wp-hill-3: #141a2a;
   --wp-stars: 1;
+  --wp-glow: #8aa2ff;
+}
+
+/* Pixel era — dusk bands by day, a BGI-blue night after dark */
+.wp-pixel {
+  --wp-band-0: #ffd9a8;
+  --wp-band-1: #ffc69a;
+  --wp-band-2: #ffb08f;
+  --wp-band-3: #f79a8f;
+  --wp-band-4: #e8868f;
+  --wp-band-5: #d9758f;
+  --wp-sun: #fff2c4;
+  --wp-hill-1: #8a5a8c;
+  --wp-hill-2: #5b3a72;
+  --wp-hill-3: #3c2756;
+  --wp-glow: #ff4d8d;
+}
+.dark .wp-pixel {
+  --wp-band-0: #07071a;
+  --wp-band-1: #0b0a24;
+  --wp-band-2: #100e30;
+  --wp-band-3: #17153a;
+  --wp-band-4: #1d1a48;
+  --wp-band-5: #221f4d;
+  --wp-sun: #f6eedd;
+  --wp-hill-1: #2e2a66;
+  --wp-hill-2: #1c1945;
+  --wp-hill-3: #0b0a1f;
+  --wp-stars: 1;
+  --wp-glow: #3ee6ff;
+}
+
+/* Blueprint */
+.wp-blueprint {
+  --wp-sky-top: #eef3fb;
+  --wp-sky-bottom: #e3ebf7;
+  --wp-line: rgb(59 105 196 / 0.09);
+  --wp-line-strong: rgb(59 105 196 / 0.18);
+  --wp-ink: rgb(59 105 196 / 0.32);
+  --wp-glow: #3b69c4;
+}
+.dark .wp-blueprint {
+  --wp-sky-top: #0c2347;
+  --wp-sky-bottom: #0a1d3c;
+  --wp-line: rgb(173 204 255 / 0.07);
+  --wp-line-strong: rgb(173 204 255 / 0.14);
+  --wp-ink: rgb(173 204 255 / 0.28);
+  --wp-glow: #9cc3ff;
+}
+.wp-grid {
+  background-image:
+    linear-gradient(to right, var(--wp-line-strong) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--wp-line-strong) 1px, transparent 1px),
+    linear-gradient(to right, var(--wp-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--wp-line) 1px, transparent 1px);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+}
+
+/* Plain */
+.wp-plain {
+  --wp-sky-top: #efe9de;
+  --wp-sky-bottom: #e7e0d2;
+  --wp-glow: #c9a46a;
+}
+.dark .wp-plain {
+  --wp-sky-top: #17191f;
+  --wp-sky-bottom: #121418;
+  --wp-glow: #6f7b94;
 }
 
 .os-stars {
@@ -396,4 +468,11 @@
     radial-gradient(1px 1px at 6% 34%, #fff 50%, transparent 51%),
     radial-gradient(1px 1px at 34% 36%, #fff 50%, transparent 51%),
     radial-gradient(1px 1px at 62% 4%, #fff 50%, transparent 51%);
+}
+
+@keyframes os-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
 }

@@ -55,7 +55,7 @@ npm run dev      # http://localhost:5173
 npm run build    # type-check + production build to dist/
 npm run preview  # serve the production build
 npm run lint     # oxlint
-npm test         # vitest (window manager)
+npm test         # vitest (window manager, icon layout)
 ```
 
 ## Editing content
@@ -80,14 +80,19 @@ src/
 │  ├─ registry/apps-meta.ts   # every app: id, name, window size (plain data, read by vite.config)
 │  ├─ registry/apps.ts        # + icon, tint and lazy loader
 │  ├─ store/windows.ts        # window manager: open/focus/min/max/snap/move/resize (+ tests)
-│  ├─ store/settings.ts       # visitor preferences (click mode, autopilot)
-│  ├─ desktop/                # menu bar, icon columns, windows, URL ⇄ window sync
+│  ├─ store/settings.ts       # visitor preferences: wallpaper, click mode, icon positions, screensaver
+│  ├─ store/ui.ts             # short-lived state: boot, search, dialogs, toasts
+│  ├─ desktop/                # menu bar, icons (+ grid layout & tests), context menu, windows, URL ⇄ window sync
+│  ├─ overlays/               # boot screen, ⌘K search, About dialog, screensaver, toasts
+│  ├─ wallpaper.tsx           # four SVG/CSS wallpapers with day/night tokens
+│  ├─ system.ts               # OS actions shared by menus, search and Settings
 │  ├─ mobile/phone-os.tsx     # status bar, home screen, dock, full-screen apps
 │  ├─ app-host.tsx            # lazy-loads an app with its own error boundary
 │  └─ kernel/                 # seeded randomness, crash-proof localStorage
 ├─ apps/                      # one folder per app, each its own chunk
 │  ├─ trypnow/                # supplier + agent demo: builder, AI listing, bookings, marketplace
 │  ├─ about/
+│  ├─ settings/               # wallpaper, theme, click mode, screensaver, reset
 │  └─ project-info/           # stand-in for projects whose demo isn't built yet
 ├─ data/profile.ts            # single source of truth for all content
 ├─ data/journey.ts            # stage order, years and titles
@@ -135,7 +140,11 @@ src/
   and loader in `apps.ts`, then build it in `src/apps/<id>/`. It shows up on the
   desktop, the phone, the Windows menu and the sitemap.
 - **Demo data** is seeded (same for every visitor), saved in the visitor's
-  browser, and resettable from the app.
+  browser, and resettable from the app or from Settings.
+- **Desktop**: icons sit on a grid anchored to the nearer screen edge, so a
+  layout the visitor arranged survives resizing. Menus are Radix (keyboard and
+  screen-reader friendly); `⌘K`/`Ctrl+K` or `/` opens search. The boot plays
+  once per visitor; the screensaver starts after 90 s idle.
 
 ### The journey (`/journey`)
 
@@ -205,7 +214,8 @@ Vendor code is split so the entry chunk stays small. Every app, the journey,
 `/resume` and the 404 page are lazy-loaded:
 
 ```
-index     ~92 kB  (31 kB gzip)   the OS shell
+index    ~121 kB  (39 kB gzip)   the OS shell
+menus    ~134 kB  (38 kB gzip)   Radix menubar / context menu + floating-ui
 react    ~221 kB  (71 kB gzip)   react + react-dom + router
 motion   ~143 kB  (47 kB gzip)   animation runtime
 home     ~162 kB  (48 kB gzip)   the journey, on demand

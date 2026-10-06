@@ -9,7 +9,7 @@ import { useClock, useLaunch } from "@/os/hooks"
 import { apps, getApp, type AppDef } from "@/os/registry/apps"
 import { Wallpaper } from "@/os/wallpaper"
 
-const DOCK = ["about", "resume", "journey"]
+const DOCK = ["about", "resume", "journey", "settings"]
 
 /** Where the last tapped icon was, so the app can zoom out of it. */
 let lastTap = { x: 50, y: 50 }
