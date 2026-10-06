@@ -83,6 +83,16 @@ export function Hud() {
 
           <div className="flex shrink-0 items-center gap-3">
             <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="h-8 bg-night px-2.5 text-[0.5rem] text-cream hover:bg-ink-2 sm:text-[0.5625rem]"
+            >
+              <Link to="/" aria-label="Back to the desktop">
+                ◀ <span className="hidden sm:inline">DESKTOP</span>
+              </Link>
+            </Button>
+            <Button
               size="sm"
               variant="outline"
               className="h-8 bg-night px-2.5 text-[0.5rem] text-cream hover:bg-ink-2 sm:text-[0.5625rem]"

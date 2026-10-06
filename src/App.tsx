@@ -4,9 +4,10 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { Nav } from "@/components/nav"
 import { Footer } from "@/components/footer"
 import { ScrollProgress } from "@/components/scroll-progress"
-import Home from "@/pages/home"
+import OS from "@/os/os"
 
-// The résumé and 404 are secondary routes — keep them out of the entry chunk.
+// Everything outside the OS is a secondary page — keep it out of the entry chunk.
+const Journey = lazy(() => import("@/pages/home"))
 const Resume = lazy(() => import("@/pages/resume"))
 const NotFound = lazy(() => import("@/pages/not-found"))
 
@@ -30,10 +31,16 @@ function RouteFallback() {
   return <div className="min-h-[70svh]" />
 }
 
+/** The OS owns `/` and `/apps/*`, and must not remount as windows change the URL. */
+const isOsPath = (pathname: string) => pathname === "/" || pathname.startsWith("/apps/")
+
 export default function App() {
   const location = useLocation()
-  // The home page is a self-contained game with its own HUD and ending.
-  const isJourney = location.pathname === "/"
+
+  if (isOsPath(location.pathname)) return <OS />
+
+  // The journey is a self-contained game with its own HUD and ending.
+  const isJourney = location.pathname === "/journey"
 
   return (
     <>
@@ -54,10 +61,10 @@ export default function App() {
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
               <Route
-                path="/"
+                path="/journey"
                 element={
                   <Page>
-                    <Home />
+                    <Journey />
                   </Page>
                 }
               />

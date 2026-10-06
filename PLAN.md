@@ -14,25 +14,34 @@ native mobile apps, with an autopilot finger that taps through them.
 Work through this file in chunks: each phase ends in something that builds, runs
 and can be merged on its own. Tick boxes as they land.
 
+### Progress
+
+| Chunk | State | Notes |
+| ----- | ----- | ----- |
+| 1 · Foundation | ✅ done | Plus early slices of chunks 2, 3 and 9 (a working desktop, windows and phone home screen), so the first app can be used. |
+| First app · TrypNow | ✅ done | Full app: supplier + agent sides, dashboard, package builder, AI listing, bookings, marketplace. |
+| 2 – 11 | ⏳ next | Items below marked _partly done_ have a basic version in place. |
+
 ---
 
 ## 0. Decisions to confirm before Phase 1
 
 These are my defaults. Change any of them before we start and the plan adjusts.
 
-- [ ] **Look and feel.** A PostHog-*style* OS (warm wallpaper, top menu bar, icon
+- [x] **Look and feel.** A PostHog-*style* OS (warm wallpaper, top menu bar, icon
       columns on both edges, light windows with minimal chrome, light/dark modes),
       drawn with **our own** icons, wallpapers and copy. We do not copy PostHog's
       logo, hedgehogs, illustrations or icon set — that is their brand, and the
       portfolio should read as yours.
-- [ ] **The pixel journey stays** as an app (`Journey.exe`) instead of being the home
+- [x] **The pixel journey stays** as an app (`Journey.exe`) instead of being the home
       page. It is the most personal thing on the site, so it gets a prominent icon.
 - [ ] **`/resume` stays** a clean printable page *and* opens as a `Resume.pdf` window.
-- [ ] **Stack stays** React 19 + Vite + Tailwind v4 + Motion. Add **Zustand** for the
+      _(The page stays; for now the Résumé icon opens it. The window comes in Phase 8.)_
+- [x] **Stack stays** React 19 + Vite + Tailwind v4 + Motion. Add **Zustand** for the
       window store (see §1.3 for why). No Gatsby/Next migration.
-- [ ] **Every app has its own URL** (`/apps/trypnow` …) so a project link can be
+- [x] **Every app has its own URL** (`/apps/trypnow` …) so a project link can be
       shared, and opening that URL boots the OS with that window already open.
-- [ ] **Breakpoint:** `< 768px` → phone OS, `≥ 768px` → desktop OS (same as PostHog).
+- [x] **Breakpoint:** `< 768px` → phone OS, `≥ 768px` → desktop OS (same as PostHog).
       Tablets in landscape get the desktop.
 
 ---
@@ -244,47 +253,57 @@ so an app can adapt its layout and pause work when unfocused or covered.
 
 Goal: the new shell renders behind a route, the old site still works.
 
-- [ ] Add `zustand`. Create `os/store/windows.ts` with actions:
+- [x] Add `zustand`. Create `os/store/windows.ts` with actions:
       `open(appId, opts?)`, `close(id)`, `focus(id)`, `minimize(id)`,
       `toggleMaximize(id)`, `snap(id, side)`, `move(id, pos)`, `resize(id, size, pos?)`,
       `closeAll()`; dense z-order exactly like PostHog's `bringToFront`.
-- [ ] Unit-test the store (Vitest): z-order stays 1…n, close focuses the next window,
+      _(Also `setBounds`, which keeps windows on screen when the desktop resizes.)_
+- [x] Unit-test the store (Vitest): z-order stays 1…n, close focuses the next window,
       maximise→restore returns the previous rect, snap saves the previous rect.
-- [ ] `os/store/settings.ts` persisted to `localStorage` (try/catch, safe defaults):
-      theme, wallpaper, click mode (single/double), autopilot enabled, sounds,
-      reduce motion, reduce transparency.
-- [ ] `os/registry/apps.ts` with entries for every app in §Phase 6–8 (components can
-      be placeholders that render the app name).
-- [ ] Routing: `/` → OS shell; `/apps/:id` → OS shell + that window open and focused;
-      `/resume` → printable page (unchanged); `?windows=` restores a shared layout.
-      Unknown app id → 404 window ("App not found" with a link home).
-- [ ] `useIsPhone()` — `matchMedia("(max-width: 767px)")`, hydrated before first
+- [x] `os/store/settings.ts` persisted to `localStorage` (try/catch, safe defaults).
+      _Has click mode and autopilot now. Theme stays in `use-theme` because it must
+      apply before first paint. Wallpaper, sounds and reduce-transparency arrive
+      with the Settings app._
+- [x] `os/registry/apps.ts` with entries for every project app, plus About,
+      Résumé and Journey. Projects without a demo yet open a project-info window
+      (what it is, what I built, stack, links). Plain data lives in
+      `apps-meta.ts` so the Vite config can read it.
+- [x] Routing: `/` → OS shell; `/apps/:id` → OS shell + that window open and focused;
+      `/resume` → printable page (unchanged). Unknown app id → back to `/`
+      (the "App not found" dialog comes with Phase 10's error window).
+- [ ] `?windows=` restores a shared layout — moved to Phase 3 (shareable layout).
+- [x] `useIsPhone()` — `matchMedia("(max-width: 767px)")`, hydrated before first
       paint, switches between `<DesktopOS/>` and `<PhoneOS/>`.
-- [ ] Each app is `React.lazy` + `Suspense` with a skeleton that matches the app's
-      window size, so windows never jump while loading.
-- [ ] Move the current pixel journey to `apps/journey` unchanged; it keeps working at
-      `/apps/journey` (and `/journey` redirects there).
-- [ ] Update `vite.config.ts` `ROUTES` (sitemap) with every `/apps/:id`.
+- [x] Each app is `React.lazy` + `Suspense`. The window opens at full size
+      straight away with an "Opening…" state inside, so nothing jumps while it
+      loads. Each app also has an error boundary with a Reopen button.
+- [x] The pixel journey moved to `/journey`, unchanged and now lazy-loaded (the
+      entry bundle dropped from 228 KB to 92 KB). Its icon opens it as a full
+      page, `/apps/journey` redirects there, and its HUD has a "◀ Desktop" button.
+      It moves into a scrolling window in Phase 8.
+- [x] Update `vite.config.ts` `ROUTES` (sitemap) with every `/apps/:id`.
 
 **Done when:** `npm run build` + `npm run lint` pass, `/apps/journey` plays the old
-journey inside a placeholder shell, store tests pass.
+journey inside a placeholder shell, store tests pass. ✅ Build, lint and 12 store
+tests pass. A Playwright pass on desktop (1440×900) and phone (390×844) drove
+every TrypNow flow with no console errors.
 
 ---
 
 ## Phase 2 — Desktop shell  ·  _chunk 2_
 
-- [ ] **Layout** like §1.1: `h-dvh` column, menubar, desktop viewport with
+- [x] **Layout** like §1.1: `h-dvh` column, menubar, desktop viewport with
       `overflow-clip` that is the drag-constraints ref.
-- [ ] **Wallpapers** — 3–4 original scenes (e.g. "Dehradun hills", "Night desk",
+- [ ] _Partly done: "Doon hills", light and dark._ **Wallpapers** — 3–4 original scenes (e.g. "Dehradun hills", "Night desk",
       "Pixel era" that nods to the journey, plain colour). Each has light/dark
       variants and an icon-glow colour. SVG/CSS where possible, one optimised
       WebP each otherwise (< 150 KB).
-- [ ] **Desktop icons** — left column: work projects (TrypNow, SureGem, 11Jobs,
+- [x] **Desktop icons** — left column: work projects (TrypNow, SureGem, 11Jobs,
       11Matrix). Right column: side projects + system (Fujin, Bingo Master, Gaming
       Era, File Scanner, About me, Résumé, Contact, Terminal, Journey, Trash).
       Columns wrap into extra columns on short screens (`flex-col flex-wrap`,
       `wrap-reverse` on the right).
-- [ ] Icon interactions: single-click selects, double-click (or single-click when
+- [ ] _Partly done: select, double-click, single-click mode, Enter, tap on touch, preload on hover. Arrow keys still to do._ Icon interactions: single-click selects, double-click (or single-click when
       the setting says so) opens; Enter opens the selected icon; arrow keys move
       selection; labels truncate to two lines with full name in a tooltip.
 - [ ] Icons are **draggable** on the desktop; positions persist per viewport size.
@@ -292,7 +311,7 @@ journey inside a placeholder shell, store tests pass.
       per pointer move — PostHog's trick).
 - [ ] **Right-click context menu**: Open, Change wallpaper, Sort icons, Display
       settings, About this portfolio.
-- [ ] **Menubar** — left: my logo/initials menu (About this OS, Settings, Restart
+- [ ] _Partly done: brand, focused app name, Windows menu, theme toggle, clock._ **Menubar** — left: my logo/initials menu (About this OS, Settings, Restart
       → replays boot, Download résumé); menus *Projects*, *Side projects*, *Apps*,
       *Contact*. Right tray: autopilot toggle (▶/⏸), search (⌘K), theme, active
       windows button with count, clock (local time + "Dehradun" time tooltip).
@@ -308,39 +327,50 @@ toggle; double-clicking an icon logs `open(appId)`.
 
 ## Phase 3 — Window manager  ·  _chunk 3_
 
-- [ ] `window.tsx` chrome: title bar (icon, title, ↺ "reset demo", ↗ "open live
+- [ ] _Partly done: icon, title, Live site link, – □ ×. The reset button lives inside each app for now._ `window.tsx` chrome: title bar (icon, title, ↺ "reset demo", ↗ "open live
       site", – □ ×), body, optional toolbar slot the app can fill.
 - [ ] **Open animation** scales up from the icon's rect (`fromOrigin`), close
       animation scales back down; minimise flies to the active-windows button.
       All three collapse to a fade under `prefers-reduced-motion`.
-- [ ] **Placement**: centre the first window, cascade the next ones (+32px, +32px),
+- [x] **Placement**: centre the first window, cascade the next ones (+32px, +32px),
       wrap back when they would leave the viewport; respect per-app default sizes.
-- [ ] **Drag** by title bar only (Motion `dragControls`), constrained to the desktop.
-- [ ] **Resize** from all 8 edges/corners, clamped to min/max; left/top handles
+- [x] **Drag** by title bar only (Motion `dragControls`), constrained to the desktop.
+- [ ] _Partly done: right, bottom and the bottom-right corner._ **Resize** from all 8 edges/corners, clamped to min/max; left/top handles
       move the origin too. Use pointer events + `requestAnimationFrame`; commit to the
       store on pointer-up only.
 - [ ] **Snap** left/right half with the translucent indicator at a 50px threshold;
       top edge → maximise. Double-click title bar → maximise/restore.
 - [ ] Dragging a maximised window restores it under the pointer.
-- [ ] **Focus**: pointer-down anywhere in a window brings it to front; the focused
+- [x] **Focus**: pointer-down anywhere in a window brings it to front; the focused
       window gets a stronger shadow and coloured title; others dim slightly.
 - [ ] **Keyboard shortcuts**: `Shift+W` close, `Shift+↑/↓` maximise/restore,
       `Shift+←/→` snap, `Shift+X` close all, `Alt+Tab`-style cycling with
       `Shift+Tab` (avoid browser-reserved combos), `Esc` closes dialogs, `⌘K` / `/`
       spotlight, `m` theme, `\` wallpaper. Shortcuts are ignored while typing in
       inputs.
-- [ ] **Active-windows panel** in the menubar: list, restore, close, close all.
-- [ ] **URL sync**: focusing a window replaces the URL with `/apps/:id` (no history
+- [x] **Active-windows panel** in the menubar: list, restore, close, close all.
+- [ ] _Partly done: open pushes, focus/close replace, deep links and reload work, Back refocuses or reopens the previous app. "Back closes the newest window" still to do._ **URL sync**: focusing a window replaces the URL with `/apps/:id` (no history
       spam: `replace` on focus, `push` on open); closing the last window → `/`.
       Browser Back closes the most recently opened window.
 - [ ] **Shareable layout**: "Copy link to this desktop" serialises open windows
       as viewport percentages (PostHog's `?windows=` format).
-- [ ] Clamp windows back into view on viewport resize.
+- [x] Clamp windows back into view on viewport resize.
 - [ ] **Occlusion/visibility**: pass `isFocused` and `isVisible` (not minimised, < 80%
       covered) to apps so timers, canvases and fake live feeds pause when hidden.
-- [ ] A11y: each window is `role="dialog"` with `aria-labelledby` its title; focus
+- [ ] _Partly done: `role="dialog"` + `aria-labelledby`, labelled buttons, minimised windows are `inert`._ A11y: each window is `role="dialog"` with `aria-labelledby` its title; focus
       moves into a window on open and back to its icon on close; window buttons
       have labels; drag/resize have keyboard equivalents (the shortcuts above).
+
+Lessons from chunk 1, worth keeping:
+- Pass Motion **numeric** `dragConstraints` (from the store's bounds), not a ref.
+  With a ref, Motion rescales the window's position inside the bounds every time
+  the window changes size, and it drifts off its stored spot.
+- React Router's `navigate` changes identity on every navigation. The "focus →
+  URL" effect therefore checks the focused id really changed, compares against
+  the last URL it *requested*, and tags its own rewrites (`state.fromFocus`) so
+  the "URL → window" effect never reopens a window that was just closed.
+- Title-bar buttons are `data-no-focus`, so closing a background window doesn't
+  bring it to the front first.
 
 **Done when:** placeholder apps can be opened, dragged, resized, snapped, maximised,
 minimised and closed with mouse and keyboard; layout survives reload via URL.
@@ -410,18 +440,18 @@ stops it instantly without breaking the open app.
 
 Shared plumbing so every demo behaves like a real product without a backend.
 
-- [ ] `rng.ts` — seeded PRNG (mulberry32) + generators for names, cities, prices,
+- [ ] _Partly done: `os/kernel/rng.ts` (mulberry32, int, pick, chance, delay). Generators live in each app for now._ `rng.ts` — seeded PRNG (mulberry32) + generators for names, cities, prices,
       dates, avatars (initials), so data is realistic and stable between visits.
 - [ ] `fake-server.ts` — `createApi(app, routes)` returning `get/post/patch/delete`
       with 150–600ms latency, pagination, filtering, sorting, and an occasional
       configurable error so loading/error states are real.
-- [ ] `persist.ts` — each app's data lives in `localStorage` under `os:<app>:v1`;
+- [ ] _Partly done: `os/kernel/storage.ts` (localStorage that never throws). TrypNow persists to `os:trypnow:v1` and has its own Reset._ `persist.ts` — each app's data lives in `localStorage` under `os:<app>:v1`;
       the window's ↺ button and Settings → "Reset all demos" restore seed data.
 - [ ] `bus.ts` — `BroadcastChannel` wrapper so multiplayer demos (Bingo, Gaming Era
       chat) work **between two tabs** of the site, with a bot opponent when alone.
 - [ ] Shared UI kit for apps (table with sort/filter/pagination, drawer, toast,
       empty state, skeleton) on top of the existing shadcn primitives.
-- [ ] Every demo shows a small **"Demo data"** badge and a link to the live product
+- [ ] _Partly done (TrypNow)._ Every demo shows a small **"Demo data"** badge and a link to the live product
       / repo, so nobody mistakes it for the real service.
 
 ---
@@ -431,11 +461,18 @@ Shared plumbing so every demo behaves like a real product without a backend.
 The four demos already exist in `src/components/journey/app-*.tsx`. Move each into
 `src/apps/<id>/`, make it fill a resizable window, and widen it into a fuller app.
 
-- [ ] **TrypNow** (`app-trypnow.tsx`, 383 lines)
-  - [ ] Supplier and Agent views switchable from a sidebar.
-  - [ ] Drag-and-drop package builder (existing) + live price total.
-  - [ ] Prompt → attraction listing (existing) with editable generated fields.
-  - [ ] Bookings table: filter by status/date, sort, paginate, open a booking drawer.
+- [x] **TrypNow** (`app-trypnow.tsx`, 383 lines) → `src/apps/trypnow/`
+  - [x] Supplier and Agent views switchable from a sidebar.
+  - [x] Drag-and-drop package builder (existing) + live price total + publish.
+  - [x] Prompt → attraction listing (existing), saved into inventory and usable in
+        the builder.
+  - [x] Bookings table: search, filter by status, sort, paginate, booking drawer
+        with confirm / decline / cancel.
+  - [x] Supplier dashboard (KPI tiles, approvals, top packages, activity) and agent
+        marketplace (search, country filter, booking form). The loop works end to
+        end: publish as supplier → book as agent → confirm as supplier.
+  - [x] The journey's TrypNow stage now reuses the same builder and AI listing.
+  - [ ] Tour script for the autopilot (Phase 4). The `data-tour` targets are in place.
 - [ ] **SureGem** (`app-suregem.tsx`, 552 lines)
   - [ ] Search + filters (shape, carat, colour, clarity, price), grid/list toggle.
   - [ ] Stone detail drawer (existing), cart, inquiry form, supplier upload (existing).
@@ -473,7 +510,7 @@ The four demos already exist in `src/components/journey/app-*.tsx`. Move each in
 
 ## Phase 8 — System apps  ·  _chunk 8_
 
-- [ ] **About me** — photo/avatar, short bio, skills from `profile.ts`, timeline.
+- [ ] _Partly done: bio, skills, links, résumé download. Photo and timeline still to do._ **About me** — photo/avatar, short bio, skills from `profile.ts`, timeline.
 - [ ] **Résumé.pdf** — renders the `/resume` page in a window with Download / Print.
 - [ ] **Contact** — mail-compose window (To prefilled, Subject, Body) that opens
       `mailto:` on Send; buttons for LinkedIn/GitHub/email copy.
@@ -500,13 +537,13 @@ Under 768px the site becomes a phone. Same registry, same app components.
 
 ### 9.1 Home screen
 
-- [ ] **Status bar**: time, "5G" + signal, battery (real level via Battery API when
+- [ ] _Partly done: time, signal, wifi, battery icons, safe areas._ **Status bar**: time, "5G" + signal, battery (real level via Battery API when
       available, else 87%), safe-area insets (`env(safe-area-inset-*)`).
-- [ ] **Widget** at the top of page 1: name, role, "open to work" dot, location.
-- [ ] **App grid** 4 columns, icons with labels; page 1 = work projects, page 2 =
+- [x] **Widget** at the top of page 1: name, role, "open to work" dot, location.
+- [ ] _Partly done: 4-column grid in "Work" and "Side projects" cards on one scrolling page._ **App grid** 4 columns, icons with labels; page 1 = work projects, page 2 =
       side projects + system apps. Horizontal swipe between pages with **page dots**
       (scroll-snap so it's native-feeling and cheap).
-- [ ] **Dock** (4 apps): About, Résumé, Contact, Terminal.
+- [ ] _Partly done: About, Résumé, Journey._ **Dock** (4 apps): About, Résumé, Contact, Terminal.
 - [ ] Long-press an icon → quick-actions sheet (Open, Open live site, View code);
       long-press empty space → "jiggle" mode (just for fun, no persistence needed).
 - [ ] Optional **lock screen** on first visit: clock + "swipe up to unlock" (tap works
@@ -514,16 +551,16 @@ Under 768px the site becomes a phone. Same registry, same app components.
 
 ### 9.2 Apps
 
-- [ ] Opening **zooms the app out of its icon** (shared-element scale from the icon
+- [x] Opening **zooms the app out of its icon** (shared-element scale from the icon
       rect to full screen); closing zooms back into the icon.
-- [ ] Apps are full-screen with their own top bar (title, back chevron, "•••" menu
+- [ ] _Partly done: Home back button, title, live-site link._ Apps are full-screen with their own top bar (title, back chevron, "•••" menu
       with Reset demo / Open live site) and respect the safe areas.
-- [ ] **Home indicator** at the bottom: swipe up (or tap) to go home; swipe up and
+- [ ] _Partly done: tap to go home._ **Home indicator** at the bottom: swipe up (or tap) to go home; swipe up and
       hold → **app switcher** with cards of recent apps (swipe a card up to close).
-- [ ] Hardware back button / browser Back closes the app (history entry per open).
+- [x] Hardware back button / browser Back closes the app (history entry per open).
 - [ ] Every demo gets a **mobile layout** (bottom tabs instead of sidebars, sheets
       instead of drawers, tables become cards). Drag-and-drop demos support touch.
-- [ ] `/apps/:id` on a phone opens that app straight away over the home screen.
+- [x] `/apps/:id` on a phone opens that app straight away over the home screen.
 
 ### 9.3 Autopilot on mobile
 
@@ -569,11 +606,11 @@ horizontal page scroll, no text under 14px, tap targets ≥ 44px.
       surfaces, never directly on the wallpaper).
 
 ### SEO / sharing
-- [ ] Per-app `<title>`, description, canonical and OG image (`useDocumentMeta`).
+- [ ] _Partly done: title, description, canonical. OG images still to do._ Per-app `<title>`, description, canonical and OG image (`useDocumentMeta`).
 - [ ] Pre-render static HTML for `/` and each `/apps/:id` at build (small script
       with the pre-installed Playwright, or `vite-plugin-ssr`-style prerender) so
       crawlers and link previews see real content. `<noscript>` lists projects.
-- [ ] Sitemap includes every app route.
+- [x] Sitemap includes every app route.
 
 ### Testing
 - [ ] Vitest: window store, autopilot engine (hand-over, abort, resume), fake server.

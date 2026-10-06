@@ -1,10 +1,16 @@
 # Mohammad Ashfaq — Portfolio
 
-Personal portfolio and résumé site. The home page is a scroll-driven pixel-art
-"game" of my developer journey: it boots on a 3D CRT computer, dives into Turbo
-C++, and plays through fifteen stages from 2018 to today, several of them
-playable. The recent products (TrypNow, SureGem, 11jobs, 11Matrix) each "boot"
-in a browser window and run as clickable demos on fake data. The `/resume` page stays a clean, printable document.
+Personal portfolio and résumé site, built as an operating system in the browser.
+The home page is a desktop: every project is an app icon that opens in a
+draggable, resizable window and runs as a working demo on fake data. On phones
+the same apps sit on a phone home screen and open full-screen. The layout takes
+its cue from posthog.com's desktop site. See [`PLAN.md`](PLAN.md) for the
+research and the build plan, chunk by chunk.
+
+`/journey` is a scroll-driven pixel-art "game" of my developer journey: it boots
+on a 3D CRT computer, dives into Turbo C++, and plays through fifteen stages from
+2018 to today, several of them playable. The `/resume` page stays a clean,
+printable document.
 
 React + TypeScript + Vite, styled with Tailwind CSS v4, pixel components from
 [8bitcn](https://8bitcn.com), animated with Motion.
@@ -37,6 +43,7 @@ missing value degrades the metadata rather than breaking the build.
 | Pixel UI   | 8bitcn components, vendored in `ui/8bit/`    |
 | Fonts      | Press Start 2P, Pixelify Sans, VT323 — self-hosted via Fontsource |
 | Animation  | Motion (`motion/react`), CSS 3D transforms   |
+| State      | Zustand (window manager, settings, app data) |
 | Routing    | React Router, with lazy secondary routes     |
 | Icons      | lucide-react, plus local brand marks         |
 
@@ -48,6 +55,7 @@ npm run dev      # http://localhost:5173
 npm run build    # type-check + production build to dist/
 npm run preview  # serve the production build
 npm run lint     # oxlint
+npm test         # vitest (window manager)
 ```
 
 ## Editing content
@@ -67,6 +75,20 @@ update `profile.resumeFile` / `profile.resumeFileName` if the name changes.
 
 ```
 src/
+├─ os/                        # the operating system
+│  ├─ os.tsx                  # picks the desktop or phone shell, per-app page meta
+│  ├─ registry/apps-meta.ts   # every app: id, name, window size (plain data, read by vite.config)
+│  ├─ registry/apps.ts        # + icon, tint and lazy loader
+│  ├─ store/windows.ts        # window manager: open/focus/min/max/snap/move/resize (+ tests)
+│  ├─ store/settings.ts       # visitor preferences (click mode, autopilot)
+│  ├─ desktop/                # menu bar, icon columns, windows, URL ⇄ window sync
+│  ├─ mobile/phone-os.tsx     # status bar, home screen, dock, full-screen apps
+│  ├─ app-host.tsx            # lazy-loads an app with its own error boundary
+│  └─ kernel/                 # seeded randomness, crash-proof localStorage
+├─ apps/                      # one folder per app, each its own chunk
+│  ├─ trypnow/                # supplier + agent demo: builder, AI listing, bookings, marketplace
+│  ├─ about/
+│  └─ project-info/           # stand-in for projects whose demo isn't built yet
 ├─ data/profile.ts            # single source of truth for all content
 ├─ data/journey.ts            # stage order, years and titles
 ├─ components/
@@ -86,7 +108,7 @@ src/
 │  ├─ motion-primitives.tsx   # Reveal (résumé / footer)
 │  ├─ nav.tsx, footer.tsx, icons.tsx   # chrome for /resume and 404
 ├─ pages/
-│  ├─ home.tsx                # / — the journey
+│  ├─ home.tsx                # /journey — the pixel journey
 │  ├─ resume.tsx              # /resume — web résumé + PDF download + print
 │  └─ not-found.tsx           # catch-all
 ├─ hooks/
@@ -97,7 +119,25 @@ src/
 
 ## Design notes
 
-### The journey (`/`)
+### The OS (`/`, `/apps/:id`)
+
+- **URL is the source of truth.** Opening an app navigates to `/apps/<id>`;
+  focusing or closing a window rewrites the URL to whatever is now on top. Deep
+  links, reload and Back all work, and each app has its own title and canonical.
+- **Windows** live in one Zustand store with dense z-order (1…n, like PostHog's
+  `bringToFront`). Motion animates between store states and handles dragging.
+  Its drag limits are numbers taken from the store: passing a ref makes Motion
+  move the window whenever its size changes.
+- **Apps** use container queries (`@container`, `@3xl:`…), never viewport
+  breakpoints, because a window can be narrow on a wide screen. The same
+  component then works in a window, on the phone and inside the journey.
+- **Adding an app**: add an entry to `src/os/registry/apps-meta.ts` and its icon
+  and loader in `apps.ts`, then build it in `src/apps/<id>/`. It shows up on the
+  desktop, the phone, the Windows menu and the sitemap.
+- **Demo data** is seeded (same for every visitor), saved in the visitor's
+  browser, and resettable from the app.
+
+### The journey (`/journey`)
 
 - **Eras** — each era of the story lives in the tools of its time. The pixel
   Turbo C++ era hands over to the Android Studio era through a camera pull-back:
@@ -161,14 +201,16 @@ src/
 
 ### Bundle
 
-Vendor code is split so the entry chunk stays small, and `/resume` and the 404
-page are lazy-loaded:
+Vendor code is split so the entry chunk stays small. Every app, the journey,
+`/resume` and the 404 page are lazy-loaded:
 
 ```
-index   ~211 kB  (65 kB gzip)   app code, including the journey and demos
-react   ~220 kB  (70 kB gzip)   react + react-dom + router
-motion  ~142 kB  (47 kB gzip)   animation runtime
-resume    ~9 kB   (2 kB gzip)   loaded on demand
+index     ~92 kB  (31 kB gzip)   the OS shell
+react    ~221 kB  (71 kB gzip)   react + react-dom + router
+motion   ~143 kB  (47 kB gzip)   animation runtime
+home     ~162 kB  (48 kB gzip)   the journey, on demand
+trypnow   ~51 kB  (15 kB gzip)   on demand (app + shared builder)
+resume    ~10 kB   (3 kB gzip)   on demand
 ```
 
 ## Deployment
