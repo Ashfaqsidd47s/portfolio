@@ -95,6 +95,10 @@ export default defineConfig(({ mode, command }) => {
             if (/[\\/]node_modules[\\/](motion|framer-motion)[\\/]/.test(id)) {
               return "motion"
             }
+            // Menus and their positioning engine change rarely; cache them on their own.
+            if (/[\\/]node_modules[\\/](@radix-ui|@floating-ui|react-remove-scroll|aria-hidden)/.test(id)) {
+              return "menus"
+            }
             if (
               /[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(
                 id

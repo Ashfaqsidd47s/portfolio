@@ -1,13 +1,22 @@
 import * as React from "react"
+import * as ContextMenu from "@radix-ui/react-context-menu"
 import { AnimatePresence } from "motion/react"
+import { Check } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { profile } from "@/data/profile"
 import { AppIcon } from "@/os/app-icon"
 import { openWindowFor, useLaunch } from "@/os/hooks"
 import { getApp, type AppDef } from "@/os/registry/apps"
+import { cn } from "@/lib/utils"
+import { useScreensaverTimer } from "@/os/overlays/idle"
+import { Screensaver } from "@/os/overlays/screensaver"
+import { useSettings } from "@/os/store/settings"
 import { selectFocusedId, useWindows, windowsStore } from "@/os/store/windows"
+import { useSystemActions } from "@/os/system"
 import { Wallpaper } from "@/os/wallpaper"
+import { WALLPAPERS } from "@/os/wallpapers"
 import { DesktopIcons } from "./desktop-icons"
+import { menu } from "./menu-styles"
 import { MenuBar } from "./menubar"
 import { OsWindow } from "./os-window"
 
@@ -105,8 +114,59 @@ function useUrlSync(routeApp: AppDef | undefined) {
   }, [focusedId, navigate])
 }
 
+/** Right-click on empty desktop. */
+function DesktopMenu({ children }: { children: React.ReactNode }) {
+  const wallpaper = useSettings((s) => s.wallpaper)
+  const moved = useSettings((s) => Object.keys(s.iconCells).length > 0)
+  const system = useSystemActions()
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content className={menu.content} data-tour="desktop-menu">
+          <ContextMenu.Sub>
+            <ContextMenu.SubTrigger className={cn(menu.item, "data-[state=open]:not-data-[highlighted]:bg-muted")}>
+              Change wallpaper <span className={menu.shortcut}>›</span>
+            </ContextMenu.SubTrigger>
+            <ContextMenu.Portal>
+              <ContextMenu.SubContent className={menu.content} sideOffset={4}>
+                <ContextMenu.RadioGroup
+                  value={wallpaper}
+                  onValueChange={(v) => useSettings.getState().setWallpaper(v as typeof wallpaper)}
+                >
+                  {WALLPAPERS.map((w) => (
+                    <ContextMenu.RadioItem key={w.id} value={w.id} className={cn(menu.item, menu.radio)} data-tour={`wallpaper-${w.id}`}>
+                      <ContextMenu.ItemIndicator className={menu.indicator}>
+                        <Check className="size-3.5" />
+                      </ContextMenu.ItemIndicator>
+                      {w.name}
+                    </ContextMenu.RadioItem>
+                  ))}
+                </ContextMenu.RadioGroup>
+              </ContextMenu.SubContent>
+            </ContextMenu.Portal>
+          </ContextMenu.Sub>
+          <ContextMenu.Item className={menu.item} disabled={!moved} onSelect={system.cleanUpIcons} data-tour="clean-up">
+            Clean up icons
+          </ContextMenu.Item>
+          <ContextMenu.Separator className={menu.separator} />
+          <ContextMenu.Item className={menu.item} onSelect={() => system.openApp("settings")}>
+            Settings…
+          </ContextMenu.Item>
+          <ContextMenu.Item className={menu.item} onSelect={system.about}>
+            About Ashfaq OS
+          </ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu.Root>
+  )
+}
+
 export function DesktopOS({ routeApp }: { routeApp?: AppDef }) {
   const viewportRef = React.useRef<HTMLDivElement>(null)
+  const backgroundRef = React.useRef<HTMLDivElement>(null)
+  const wallpaper = useSettings((s) => s.wallpaper)
+  useScreensaverTimer()
 
   React.useLayoutEffect(() => {
     const el = viewportRef.current
@@ -121,14 +181,19 @@ export function DesktopOS({ routeApp }: { routeApp?: AppDef }) {
   useUrlSync(routeApp)
 
   return (
-    <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
+    // The wallpaper class on the root shares its --wp-glow with the icons.
+    <div className={cn("fixed inset-0 flex flex-col overflow-hidden bg-background", `wp-${wallpaper}`)}>
       <Wallpaper />
       <MenuBar />
       <div ref={viewportRef} className="relative min-h-0 flex-1 overflow-clip">
+        <DesktopMenu>
+          <div ref={backgroundRef} data-desktop-background className="absolute inset-0" />
+        </DesktopMenu>
         <Welcome />
-        <DesktopIcons />
+        <DesktopIcons background={backgroundRef} />
         <WindowList />
       </div>
+      <Screensaver />
     </div>
   )
 }

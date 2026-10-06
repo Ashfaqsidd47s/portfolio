@@ -114,6 +114,14 @@ export const appsMeta: AppMeta[] = [
     window: { width: 640, height: 640, minWidth: 360, minHeight: 360 },
   },
   {
+    id: "settings",
+    name: "Settings",
+    description: "Wallpaper, theme, how icons open, the screensaver, and resetting the demos.",
+    kind: "system",
+    column: "right",
+    window: { width: 720, height: 640, minWidth: 380, minHeight: 420 },
+  },
+  {
     id: "resume",
     name: "Résumé",
     description: "Printable résumé with a PDF download.",

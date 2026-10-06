@@ -20,7 +20,8 @@ and can be merged on its own. Tick boxes as they land.
 | ----- | ----- | ----- |
 | 1 · Foundation | ✅ done | Plus early slices of chunks 2, 3 and 9 (a working desktop, windows and phone home screen), so the first app can be used. |
 | First app · TrypNow | ✅ done | Full app: supplier + agent sides, dashboard, package builder, AI listing, bookings, marketplace. |
-| 2 – 11 | ⏳ next | Items below marked _partly done_ have a basic version in place. |
+| 2 · Desktop shell | ✅ done | Plus, pulled forward: the Settings app (Phase 8), ⌘K search (Phase 10) and OS toasts. |
+| 3 – 11 | ⏳ next | Items below marked _partly done_ have a basic version in place. |
 
 ---
 
@@ -294,34 +295,45 @@ every TrypNow flow with no console errors.
 
 - [x] **Layout** like §1.1: `h-dvh` column, menubar, desktop viewport with
       `overflow-clip` that is the drag-constraints ref.
-- [ ] _Partly done: "Doon hills", light and dark._ **Wallpapers** — 3–4 original scenes (e.g. "Dehradun hills", "Night desk",
-      "Pixel era" that nods to the journey, plain colour). Each has light/dark
-      variants and an icon-glow colour. SVG/CSS where possible, one optimised
-      WebP each otherwise (< 150 KB).
+- [x] **Wallpapers** — four original scenes, all SVG/CSS with no image downloads:
+      "Doon hills", "Pixel era" (a stepped pixel sunset, BGI-blue at night), "Blueprint"
+      (graph paper and wireframes) and "Plain". Each has day/night colours from
+      `--wp-*` tokens and an icon-hover glow colour.
 - [x] **Desktop icons** — left column: work projects (TrypNow, SureGem, 11Jobs,
       11Matrix). Right column: side projects + system (Fujin, Bingo Master, Gaming
       Era, File Scanner, About me, Résumé, Contact, Terminal, Journey, Trash).
       Columns wrap into extra columns on short screens (`flex-col flex-wrap`,
       `wrap-reverse` on the right).
-- [ ] _Partly done: select, double-click, single-click mode, Enter, tap on touch, preload on hover. Arrow keys still to do._ Icon interactions: single-click selects, double-click (or single-click when
+- [x] Icon interactions: single-click selects, double-click (or single-click when
       the setting says so) opens; Enter opens the selected icon; arrow keys move
       selection; labels truncate to two lines with full name in a tooltip.
-- [ ] Icons are **draggable** on the desktop; positions persist per viewport size.
-- [ ] **Rubber-band selection** on empty desktop (direct style writes, no re-render
+- [x] Icons are **draggable** on the desktop and the positions persist. Instead of
+      one layout per viewport size, icons snap to a grid anchored to the nearer
+      edge (`icon-layout.ts`, unit-tested), so a layout survives resizing. Dropping
+      on another icon swaps the two.
+- [x] **Rubber-band selection** on empty desktop (direct style writes, no re-render
       per pointer move — PostHog's trick).
-- [ ] **Right-click context menu**: Open, Change wallpaper, Sort icons, Display
-      settings, About this portfolio.
-- [ ] _Partly done: brand, focused app name, Windows menu, theme toggle, clock._ **Menubar** — left: my logo/initials menu (About this OS, Settings, Restart
-      → replays boot, Download résumé); menus *Projects*, *Side projects*, *Apps*,
-      *Contact*. Right tray: autopilot toggle (▶/⏸), search (⌘K), theme, active
-      windows button with count, clock (local time + "Dehradun" time tooltip).
-- [ ] **Boot sequence** (first visit only, skippable, ~1.5s): logo → progress bar →
+- [x] **Right-click context menu** (Radix): on the desktop — Change wallpaper ▸,
+      Clean up icons, Settings…, About Ashfaq OS; on an icon — Open, Open live
+      site, View source.
+- [x] **Menubar** (Radix Menubar, arrow keys across menus) — logo menu (About,
+      Settings, Search, Download résumé, Restart → replays boot); *Projects*,
+      *Side projects*, *Apps*, *Contact* (email, copy email, GitHub, LinkedIn,
+      résumé); right: Windows menu with count, search (⌘K), theme, clock with
+      a Dehradun-time tooltip. The autopilot toggle arrives with the autopilot
+      (Phase 4).
+- [x] **Boot sequence** (first visit only, skippable, ~1.5s, skipped under reduced motion): logo → progress bar →
       desktop fades in. Reuse the terminal-boot idea from `app-window.tsx`.
-- [ ] **Screensaver** after 90s idle *when autopilot is off* (otherwise autopilot is
-      the screensaver).
+- [x] **Screensaver** after 90s idle: the MA tile bounces around and changes colour
+      at each wall, with a big clock. Waking it offers a "Turn off" toast;
+      Settings has a switch and a Preview. Until the autopilot lands it runs
+      whenever it's switched on; in Phase 4 the autopilot takes over idle time.
 
 **Done when:** the desktop renders with icons, menus, wallpaper switching and theme
-toggle; double-clicking an icon logs `open(appId)`.
+toggle; double-clicking an icon logs `open(appId)`. ✅ 26 Playwright checks cover
+boot, the context menu, icon drag/persist/swap/clean-up, rubber band, arrow keys,
+the menubar, search, Settings, About, Restart, the screensaver (fake clock) and
+the phone, with no console errors. Phase 1's checks still pass.
 
 ---
 
@@ -520,7 +532,7 @@ The four demos already exist in `src/components/journey/app-*.tsx`. Move each in
 - [ ] **Files** — a Finder-style explorer: folders *Projects*, *Side projects*,
       *Documents* (résumé) — double-click opens the app. Doubles as the index for
       people who prefer lists.
-- [ ] **Settings** — wallpaper, theme, click mode, autopilot on/off + speed, sounds,
+- [ ] _Partly done (built in chunk 2): wallpaper picker with live thumbnails, theme, click mode, clean up icons, screensaver switch + preview, restart, reset all demo data. Autopilot, sounds and reduced transparency still to come._ **Settings** — wallpaper, theme, click mode, autopilot on/off + speed, sounds,
       reduce motion/transparency, reset all demos.
 - [ ] **Journey.exe** — the existing pixel journey, scrolling inside its window
       (switch its scroll container from `window` to the window body — the
@@ -580,7 +592,7 @@ horizontal page scroll, no text under 14px, tap targets ≥ 44px.
 - [ ] Optional UI sounds (off by default): click, window open/close, error.
 - [ ] Notification toasts from apps ("New booking in TrypNow", "Scan finished").
 - [ ] Desktop badges on icons fed by those notifications.
-- [ ] Spotlight (⌘K) searches apps, projects, skills and terminal commands.
+- [ ] _Partly done (built in chunk 2): ⌘K / Ctrl+K / "/" search over apps (name, description, tech stack) and OS actions (theme, wallpapers, résumé, email, settings, restart). Terminal commands come with the Terminal app._ Spotlight (⌘K) searches apps, projects, skills and terminal commands.
 - [ ] Easter eggs: Konami code → pixel mode skin from the journey; `sudo hire-me`.
 - [ ] Custom 404 as an "error dialog" window.
 - [ ] Copy pass: every app has a one-line "what this is / what I built" header
@@ -591,7 +603,7 @@ horizontal page scroll, no text under 14px, tap targets ≥ 44px.
 ## Phase 11 — Performance, accessibility, SEO, QA  ·  _chunk 11_
 
 ### Performance budgets
-- [ ] Initial JS for the shell ≤ 120 KB gzip (apps lazy, prefetched on icon hover
+- [ ] _Note from chunk 2: Radix menus + floating-ui add ~38 KB gzip, split into a cached `menus` chunk. The entry chunk is 39 KB gzip; react 70 + motion 44 + menus 38 still need trimming to meet this._ Initial JS for the shell ≤ 120 KB gzip (apps lazy, prefetched on icon hover
       and by the autopilot one step ahead).
 - [ ] LCP < 2.0s on mid-range mobile, CLS < 0.05, no long tasks > 100ms while dragging.
 - [ ] Windows get `will-change: transform` only while dragging/animating; apps pause

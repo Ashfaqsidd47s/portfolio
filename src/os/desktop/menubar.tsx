@@ -1,130 +1,209 @@
-import * as React from "react"
-import { Moon, Sun } from "lucide-react"
+import * as Menubar from "@radix-ui/react-menubar"
+import { Check, ExternalLink, Moon, Search, Sun } from "lucide-react"
+import { profile } from "@/data/profile"
 import { useTheme } from "@/hooks/use-theme"
 import { cn } from "@/lib/utils"
 import { AppIcon } from "@/os/app-icon"
 import { useClock, useLaunch } from "@/os/hooks"
-import { getApp } from "@/os/registry/apps"
+import { apps, getApp, type AppDef } from "@/os/registry/apps"
+import { MOD_KEY, useSystemActions } from "@/os/system"
+import { useUi } from "@/os/store/ui"
 import { selectFocusedId, useWindows, windowsStore } from "@/os/store/windows"
+import { menu } from "./menu-styles"
 
-/** Lists open windows; picking one restores and focuses it. */
+function AppItems({ list }: { list: AppDef[] }) {
+  const launch = useLaunch()
+  return list.map((app) => (
+    <Menubar.Item key={app.id} className={menu.item} onSelect={() => launch(app)} data-tour={`menu-${app.id}`}>
+      <AppIcon app={app} className="size-4" />
+      <span className="flex-1">{app.name}</span>
+    </Menubar.Item>
+  ))
+}
+
+function TopMenu({ label, children, tour }: { label: React.ReactNode; children: React.ReactNode; tour?: string }) {
+  return (
+    <Menubar.Menu>
+      <Menubar.Trigger className={menu.trigger} data-tour={tour}>
+        {label}
+      </Menubar.Trigger>
+      <Menubar.Portal>
+        <Menubar.Content className={menu.content} align="start" sideOffset={6}>
+          {children}
+        </Menubar.Content>
+      </Menubar.Portal>
+    </Menubar.Menu>
+  )
+}
+
+/** Open windows, with the focused one ticked; picking one restores and focuses it. */
 function WindowsMenu() {
   const windows = useWindows((s) => s.windows)
   const focusedId = useWindows(selectFocusedId)
   const launch = useLaunch()
-  const [open, setOpen] = React.useState(false)
-  const ref = React.useRef<HTMLDivElement>(null)
-
-  React.useEffect(() => {
-    if (!open) return
-    const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false)
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false)
-    document.addEventListener("pointerdown", onDown)
-    document.addEventListener("keydown", onKey)
-    return () => {
-      document.removeEventListener("pointerdown", onDown)
-      document.removeEventListener("keydown", onKey)
-    }
-  }, [open])
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="menu"
-        onClick={() => setOpen((o) => !o)}
-        className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium hover:bg-muted"
-      >
-        Windows
-        <span className="min-w-4 rounded bg-muted px-1 text-center text-[0.6875rem] tabular-nums text-muted-foreground">
-          {windows.length}
-        </span>
-      </button>
-      {open && (
-        <div role="menu" className="absolute right-0 top-9 z-[1000] w-56 rounded-lg border border-border bg-elevated p-1 shadow-lg">
-          {windows.length === 0 ? (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">No open windows</p>
-          ) : (
-            <>
-              {windows.map((w) => {
-                const app = getApp(w.id)
-                if (!app) return null
-                return (
-                  <button
-                    key={w.id}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      launch(app)
-                      setOpen(false)
-                    }}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
-                  >
-                    <AppIcon app={app} className="size-4" />
-                    <span className={cn("flex-1 truncate", w.id === focusedId && "font-semibold")}>{app.name}</span>
-                    {w.minimized && <span className="text-[0.6875rem] text-muted-foreground">minimised</span>}
-                  </button>
-                )
-              })}
-              <div className="my-1 h-px bg-border" />
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  windowsStore.getState().closeAll()
-                  setOpen(false)
-                }}
-                className="w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
-              >
-                Close all windows
-              </button>
-            </>
-          )}
-        </div>
+    <TopMenu
+      tour="menu-windows"
+      label={
+        <>
+          Windows
+          <span className="min-w-4 rounded bg-muted px-1 text-center text-[0.6875rem] tabular-nums text-muted-foreground">
+            {windows.length}
+          </span>
+        </>
+      }
+    >
+      {windows.length === 0 ? (
+        <Menubar.Item disabled className={menu.item}>
+          No open windows
+        </Menubar.Item>
+      ) : (
+        <>
+          {windows.map((w) => {
+            const app = getApp(w.id)
+            if (!app) return null
+            return (
+              <Menubar.Item key={w.id} className={cn(menu.item, menu.radio)} onSelect={() => launch(app)}>
+                {w.id === focusedId && (
+                  <span className={menu.indicator}>
+                    <Check className="size-3.5" />
+                  </span>
+                )}
+                <AppIcon app={app} className="size-4" />
+                <span className="flex-1">{app.name}</span>
+                {w.minimized && <span className={menu.shortcut}>minimised</span>}
+              </Menubar.Item>
+            )
+          })}
+          <Menubar.Separator className={menu.separator} />
+          <Menubar.Item className={menu.item} onSelect={() => windowsStore.getState().closeAll()}>
+            Close all windows
+          </Menubar.Item>
+        </>
       )}
-    </div>
+    </TopMenu>
   )
 }
 
+function Clock() {
+  const now = useClock()
+  const dehradun = now.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })
+  return (
+    <time
+      dateTime={now.toISOString()}
+      title={`${now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })} · In Dehradun it's ${dehradun} (IST)`}
+      className="px-2 text-xs tabular-nums text-muted-foreground"
+    >
+      <span className="hidden lg:inline">{now.toLocaleDateString(undefined, { weekday: "short" })} </span>
+      {now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+    </time>
+  )
+}
+
+/**
+ * The top menu bar, built on Radix Menubar like posthog.com's: arrow keys move
+ * between menus, Escape closes, and every app is reachable from here as well
+ * as from its desktop icon.
+ */
 export function MenuBar() {
   const { theme, toggle } = useTheme()
-  const now = useClock()
   const focused = getApp(useWindows(selectFocusedId))
+  const system = useSystemActions()
+  const openSpotlight = () => useUi.getState().setSpotlightOpen(true)
 
   return (
-    <header className="relative z-[900] flex h-10 shrink-0 items-center gap-3 border-b border-border bg-background/85 px-3 backdrop-blur-md">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <span className="grid size-6 place-items-center rounded-md bg-foreground text-[0.625rem] font-bold text-background">MA</span>
-        <span className="text-xs font-semibold">Ashfaq OS</span>
-        {focused && (
-          <>
-            <span className="text-border-strong" aria-hidden>
-              /
-            </span>
-            <span className="truncate text-xs text-muted-foreground">{focused.name}</span>
-          </>
-        )}
-      </div>
-      <div className="ml-auto flex items-center gap-1">
+    <header className="relative z-[900] flex h-10 shrink-0 items-center gap-1 border-b border-border bg-background/85 px-2 backdrop-blur-md">
+      <Menubar.Root className="flex min-w-0 flex-1 items-center gap-0.5" aria-label="Menu bar">
+        <TopMenu
+          tour="menu-logo"
+          label={
+            <>
+              <span className="grid size-5 place-items-center rounded bg-foreground text-[0.5625rem] font-bold text-background">MA</span>
+              <span className="sr-only">Ashfaq OS menu</span>
+            </>
+          }
+        >
+          <Menubar.Item className={menu.item} onSelect={system.about}>
+            About Ashfaq OS
+          </Menubar.Item>
+          <Menubar.Item className={menu.item} onSelect={() => system.openApp("settings")}>
+            Settings…
+          </Menubar.Item>
+          <Menubar.Separator className={menu.separator} />
+          <Menubar.Item className={menu.item} onSelect={() => openSpotlight()}>
+            Search
+            <span className={menu.shortcut}>{MOD_KEY}K</span>
+          </Menubar.Item>
+          <Menubar.Item className={menu.item} onSelect={system.downloadResume}>
+            Download résumé (PDF)
+          </Menubar.Item>
+          <Menubar.Separator className={menu.separator} />
+          <Menubar.Item className={menu.item} onSelect={system.restart}>
+            Restart…
+          </Menubar.Item>
+        </TopMenu>
+
+        <span className="hidden truncate px-2 text-xs font-semibold lg:inline">{focused?.name ?? "Ashfaq OS"}</span>
+
+        <TopMenu label="Projects" tour="menu-projects">
+          <Menubar.Label className={menu.label}>Work</Menubar.Label>
+          <AppItems list={apps.filter((a) => a.kind === "project")} />
+        </TopMenu>
+        <TopMenu label="Side projects" tour="menu-side-projects">
+          <AppItems list={apps.filter((a) => a.kind === "side-project")} />
+        </TopMenu>
+        <TopMenu label="Apps" tour="menu-apps">
+          <AppItems list={apps.filter((a) => a.kind === "system")} />
+        </TopMenu>
+        <TopMenu label="Contact" tour="menu-contact">
+          <Menubar.Item className={menu.item} asChild>
+            <a href={profile.socials.email}>Email {profile.name.split(" ")[1]}</a>
+          </Menubar.Item>
+          <Menubar.Item className={menu.item} onSelect={system.copyEmail}>
+            Copy email address
+          </Menubar.Item>
+          <Menubar.Separator className={menu.separator} />
+          <Menubar.Item className={menu.item} asChild>
+            <a href={profile.socials.github} target="_blank" rel="noreferrer">
+              GitHub <ExternalLink className="ml-auto size-3" aria-hidden />
+            </a>
+          </Menubar.Item>
+          <Menubar.Item className={menu.item} asChild>
+            <a href={profile.socials.linkedin} target="_blank" rel="noreferrer">
+              LinkedIn <ExternalLink className="ml-auto size-3" aria-hidden />
+            </a>
+          </Menubar.Item>
+          <Menubar.Separator className={menu.separator} />
+          <Menubar.Item className={menu.item} onSelect={system.downloadResume}>
+            Download résumé (PDF)
+          </Menubar.Item>
+        </TopMenu>
+
+        <div className="ml-auto" />
         <WindowsMenu />
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          className="grid size-7 place-items-center rounded-md hover:bg-muted"
-        >
-          {theme === "dark" ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
-        </button>
-        <time
-          dateTime={now.toISOString()}
-          className="px-2 text-xs tabular-nums text-muted-foreground"
-          title={now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
-        >
-          {now.toLocaleDateString(undefined, { weekday: "short" })}{" "}
-          {now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-        </time>
-      </div>
+      </Menubar.Root>
+
+      <button
+        type="button"
+        onClick={openSpotlight}
+        data-tour="spotlight-button"
+        aria-label="Search apps and actions"
+        className="flex h-7 items-center gap-2 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-muted"
+      >
+        <Search className="size-3.5" aria-hidden />
+        <span className="hidden xl:inline">Search</span>
+        <kbd className="font-sans text-[0.6875rem]">{MOD_KEY}K</kbd>
+      </button>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        className="grid size-7 place-items-center rounded-md hover:bg-muted"
+      >
+        {theme === "dark" ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+      </button>
+      <Clock />
     </header>
   )
 }

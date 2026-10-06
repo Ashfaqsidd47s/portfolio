@@ -8,6 +8,7 @@ import {
   Grid3x3,
   Joystick,
   Plane,
+  Settings,
   ShieldCheck,
   UserRound,
   Wind,
@@ -47,6 +48,7 @@ const extras: Record<string, Pick<AppDef, "icon" | "tint" | "load">> = {
   "gaming-era": { icon: Gamepad2, tint: ["#a78bfa", "#4c1d95"], load: projectInfo },
   "file-scanner": { icon: ShieldCheck, tint: ["#86efac", "#15803d"], load: projectInfo },
   about: { icon: UserRound, tint: ["#fcd34d", "#d97706"], load: () => import("@/apps/about") },
+  settings: { icon: Settings, tint: ["#a1a1aa", "#3f3f46"], load: () => import("@/apps/settings") },
   resume: { icon: FileText, tint: ["#cbd5e1", "#475569"] },
   journey: { icon: Joystick, tint: ["#ff4d8d", "#17153a"] },
 }
