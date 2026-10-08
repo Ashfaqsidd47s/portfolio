@@ -1,16 +1,17 @@
 import * as React from "react"
-import { Copy, Download, Info, Mail, Moon, Power, Sun } from "lucide-react"
+import { Copy, Download, Info, Link2, Mail, Moon, Power, Sun } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { Github, Linkedin } from "@/components/icons"
 import { profile } from "@/data/profile"
 import { useTheme } from "@/hooks/use-theme"
 import { cn } from "@/lib/utils"
 import { AppIcon } from "@/os/app-icon"
-import { useClock, useLaunch } from "@/os/hooks"
+import { desktopLink, useClock, useLaunch } from "@/os/hooks"
 import { apps, getApp, type AppDef } from "@/os/registry/apps"
 import { selectFocusedId, useWindows, windowsStore } from "@/os/store/windows"
 import { useBoot } from "./boot"
 import { MenuPanel, useDismiss, type MenuEntry } from "./menu"
+import { SHORTCUTS } from "./shortcuts"
 
 type MenuDef = { id: string; label: React.ReactNode; title: string; entries: MenuEntry[] }
 
@@ -151,11 +152,24 @@ function WindowsMenu() {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef<HTMLDivElement>(null)
   const close = React.useCallback(() => setOpen(false), [])
+  const [copied, setCopied] = React.useState(false)
   useDismiss(open, ref, close)
+
+  React.useEffect(() => {
+    if (!copied) return
+    const t = window.setTimeout(() => setCopied(false), 2000)
+    return () => window.clearTimeout(t)
+  }, [copied])
+
+  const shortcuts: MenuEntry[] = [
+    { type: "separator" },
+    { type: "label", label: "Keyboard shortcuts" },
+    ...SHORTCUTS.map<MenuEntry>((s) => ({ type: "info", label: s.action, shortcut: s.keys })),
+  ]
 
   const entries: MenuEntry[] =
     windows.length === 0
-      ? [{ type: "label", label: "No open windows" }]
+      ? [{ type: "label", label: "No open windows" }, ...shortcuts]
       : [
           ...windows.flatMap<MenuEntry>((w) => {
             const app = getApp(w.id)
@@ -169,13 +183,25 @@ function WindowsMenu() {
             ]
           }),
           { type: "separator" },
-          { label: "Close all windows", onSelect: () => windowsStore.getState().closeAll() },
+          { label: "Cycle windows", shortcut: "⇧`", onSelect: () => windowsStore.getState().cycle() },
+          {
+            label: "Copy link to this desktop",
+            icon: <Link2 className="size-3.5" />,
+            onSelect: () =>
+              void navigator.clipboard
+                ?.writeText(desktopLink())
+                .then(() => setCopied(true))
+                .catch(() => {}),
+          },
+          { label: "Close all windows", shortcut: "⇧X", onSelect: () => windowsStore.getState().closeAll() },
+          ...shortcuts,
         ]
 
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
+        data-windows-button
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((o) => !o)}
@@ -186,7 +212,10 @@ function WindowsMenu() {
           {windows.length}
         </span>
       </button>
-      {open && <MenuPanel className="absolute right-0 top-9 w-56" label="Open windows" entries={entries} onClose={close} />}
+      {open && <MenuPanel className="absolute right-0 top-9 w-64" label="Open windows" entries={entries} onClose={close} />}
+      <span role="status" className={cn("absolute right-0 top-9 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[0.6875rem] text-background", !copied && "sr-only")}>
+        {copied ? "Link copied" : ""}
+      </span>
     </div>
   )
 }

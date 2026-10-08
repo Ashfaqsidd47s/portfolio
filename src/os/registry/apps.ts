@@ -21,6 +21,13 @@ export type AppProps = {
   appId: string
   /** Running full-screen on the phone OS rather than in a desktop window. */
   isPhone: boolean
+  /** The window is on top (always true on the phone). */
+  isFocused: boolean
+  /**
+   * The window can be seen: not minimised, not mostly covered by other
+   * windows, tab in view. Apps pause timers and animations when false.
+   */
+  isVisible: boolean
 }
 
 type AppModule = { default: ComponentType<AppProps> }

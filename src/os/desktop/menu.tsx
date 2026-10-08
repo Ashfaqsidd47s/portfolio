@@ -15,6 +15,8 @@ export type MenuEntry =
     }
   | { type: "link"; label: string; href: string; icon?: React.ReactNode; download?: string }
   | { type: "label"; label: string }
+  /** A read-only row, e.g. a keyboard shortcut and what it does. */
+  | { type: "info"; label: string; shortcut: string }
   | { type: "separator" }
 
 const ITEM =
@@ -84,6 +86,14 @@ export function MenuPanel({
           return (
             <p key={i} className="px-2 pb-0.5 pt-1.5 text-[0.625rem] font-semibold uppercase tracking-wide text-muted-foreground">
               {entry.label}
+            </p>
+          )
+        if (entry.type === "info")
+          return (
+            <p key={i} className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+              <span className="size-4 shrink-0" />
+              <span className="flex-1">{entry.label}</span>
+              <kbd className="font-sans text-[0.6875rem]">{entry.shortcut}</kbd>
             </p>
           )
         if (entry.type === "link")

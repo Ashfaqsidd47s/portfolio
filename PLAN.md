@@ -21,7 +21,8 @@ and can be merged on its own. Tick boxes as they land.
 | 1 · Foundation | ✅ done | Plus early slices of chunks 2, 3 and 9 (a working desktop, windows and phone home screen), so the first app can be used. |
 | First app · TrypNow | ✅ done | Full app: supplier + agent sides, dashboard, package builder, AI listing, bookings, marketplace. |
 | 2 · Desktop shell | ✅ done | Wallpapers, icon grid (drag, rubber band, arrow keys), context menu, full menubar, boot, screensaver. Pieces that depend on later chunks are noted inline. |
-| 3 – 11 | ⏳ next | Phase 3 (window manager) is next. Items below marked _partly done_ have a basic version in place. |
+| 3 · Window manager | ✅ done | 8-edge resize, snapping, pull-off-maximised, open/close/minimise animations, shortcuts, Back closes newest, shareable + reload-proof layout, visibility flags. |
+| 4 – 11 | ⏳ next | Chunks 4 (autopilot), 5 (kernel) and 9 (phone OS) can now go in any order. Items below marked _partly done_ have a basic version in place. |
 
 ---
 
@@ -352,39 +353,62 @@ and the screensaver, with no console errors.
 
 ## Phase 3 — Window manager  ·  _chunk 3_
 
-- [ ] _Partly done: icon, title, Live site link, – □ ×. The reset button lives inside each app for now._ `window.tsx` chrome: title bar (icon, title, ↺ "reset demo", ↗ "open live
+- [x] `window.tsx` chrome: title bar (icon, title, ↺ "reset demo", ↗ "open live
       site", – □ ×), body, optional toolbar slot the app can fill.
-- [ ] **Open animation** scales up from the icon's rect (`fromOrigin`), close
+      _↺ shows for apps marked `resettable`; it calls the handler the app
+      registers with `os/kernel/reset.ts` and remounts the app. The toolbar
+      slot waits until an app needs one._
+- [x] **Open animation** scales up from the icon's rect (`fromOrigin`), close
       animation scales back down; minimise flies to the active-windows button.
       All three collapse to a fade under `prefers-reduced-motion`.
+      _A transform-origin trick: the window scales around its icon's centre
+      (or the Windows button), so no layout animation is needed._
 - [x] **Placement**: centre the first window, cascade the next ones (+32px, +32px),
       wrap back when they would leave the viewport; respect per-app default sizes.
 - [x] **Drag** by title bar only (Motion `dragControls`), constrained to the desktop.
-- [ ] _Partly done: right, bottom and the bottom-right corner._ **Resize** from all 8 edges/corners, clamped to min/max; left/top handles
+- [x] **Resize** from all 8 edges/corners, clamped to min/max; left/top handles
       move the origin too. Use pointer events + `requestAnimationFrame`; commit to the
       store on pointer-up only.
-- [ ] **Snap** left/right half with the translucent indicator at a 50px threshold;
+      _Geometry is drawn through Motion values, so drags and resizes cause no
+      React renders; `resizeRect` keeps the opposite edge fixed._
+- [x] **Snap** left/right half with the translucent indicator at a 50px threshold;
       top edge → maximise. Double-click title bar → maximise/restore.
-- [ ] Dragging a maximised window restores it under the pointer.
+      _Snaps when the pointer reaches the edge (8px), like Windows, rather
+      than PostHog's window-overhang rule; the preview shows the target rect._
+- [x] Dragging a maximised window restores it under the pointer.
+      _Snapped windows too; the grabbed point keeps its place on the title bar._
 - [x] **Focus**: pointer-down anywhere in a window brings it to front; the focused
       window gets a stronger shadow and coloured title; others dim slightly.
-- [ ] **Keyboard shortcuts**: `Shift+W` close, `Shift+↑/↓` maximise/restore,
+- [x] **Keyboard shortcuts**: `Shift+W` close, `Shift+↑/↓` maximise/restore,
       `Shift+←/→` snap, `Shift+X` close all, `Alt+Tab`-style cycling with
       `Shift+Tab` (avoid browser-reserved combos), `Esc` closes dialogs, `⌘K` / `/`
       spotlight, `m` theme, `\` wallpaper. Shortcuts are ignored while typing in
       inputs.
+      _Cycling is `Shift+\`` instead: Shift+Tab has to keep moving focus
+      backwards for keyboard users. `Shift+↓` restores, then minimises.
+      Esc already closes menus; ⌘K / `/` come with Spotlight in Phase 10. The
+      list lives in `desktop/shortcuts.ts` and shows in the Windows menu._
 - [x] **Active-windows panel** in the menubar: list, restore, close, close all.
-- [ ] _Partly done: open pushes, focus/close replace, deep links and reload work, Back refocuses or reopens the previous app. "Back closes the newest window" still to do._ **URL sync**: focusing a window replaces the URL with `/apps/:id` (no history
+- [x] **URL sync**: focusing a window replaces the URL with `/apps/:id` (no history
       spam: `replace` on focus, `push` on open); closing the last window → `/`.
       Browser Back closes the most recently opened window.
-- [ ] **Shareable layout**: "Copy link to this desktop" serialises open windows
+      _Each open pushes an entry tagged `opened: <id>`; Back closes the window
+      the entry it leaves had opened (Forward reopens it). Re-launching an
+      already-open window replaces instead of pushing._
+- [x] **Shareable layout**: "Copy link to this desktop" serialises open windows
       as viewport percentages (PostHog's `?windows=` format).
+      _In the Windows menu. The parameter is dropped from the URL after it is
+      applied. The same format in `sessionStorage` brings the layout back on
+      reload and Back/Forward into the site._
 - [x] Clamp windows back into view on viewport resize.
-- [ ] **Occlusion/visibility**: pass `isFocused` and `isVisible` (not minimised, < 80%
+- [x] **Occlusion/visibility**: pass `isFocused` and `isVisible` (not minimised, < 80%
       covered) to apps so timers, canvases and fake live feeds pause when hidden.
-- [ ] _Partly done: `role="dialog"` + `aria-labelledby`, labelled buttons, minimised windows are `inert`._ A11y: each window is `role="dialog"` with `aria-labelledby` its title; focus
+      _`visibleWindowIds` samples coverage on a 10×10 grid; a hidden tab
+      counts as not visible too._
+- [x] A11y: each window is `role="dialog"` with `aria-labelledby` its title; focus
       moves into a window on open and back to its icon on close; window buttons
       have labels; drag/resize have keyboard equivalents (the shortcuts above).
+      _Closing hands focus to the window now on top, or to the app's icon._
 
 Lessons from chunk 1, worth keeping:
 - Pass Motion **numeric** `dragConstraints` (from the store's bounds), not a ref.
@@ -399,6 +423,11 @@ Lessons from chunk 1, worth keeping:
 
 **Done when:** placeholder apps can be opened, dragged, resized, snapped, maximised,
 minimised and closed with mouse and keyboard; layout survives reload via URL.
+✅ Build, lint and 29 unit tests pass. A Playwright pass at 1440×900 drove
+every resize edge (incl. min size), snap left/right/top with the preview,
+pulling a maximised window off, every shortcut, Back/Forward, reload, a
+shared link opened at 1920×1080, reset demo and focus return, plus a phone
+smoke test, with no console errors.
 
 ---
 

@@ -127,9 +127,22 @@ src/
   focusing or closing a window rewrites the URL to whatever is now on top. Deep
   links, reload and Back all work, and each app has its own title and canonical.
 - **Windows** live in one Zustand store with dense z-order (1…n, like PostHog's
-  `bringToFront`). Motion animates between store states and handles dragging.
-  Its drag limits are numbers taken from the store: passing a ref makes Motion
-  move the window whenever its size changes.
+  `bringToFront`). Each window draws its geometry through Motion values: drags
+  and resizes write to them directly and commit to the store on release, and
+  the window glides to every committed rect. Drag limits are numbers taken
+  from the store: passing a ref makes Motion move the window whenever its
+  size changes.
+- **Window manager**: resize from any edge, drop on a screen edge to snap
+  (top maximises), drag a maximised window to pull it out, `Shift`+arrows /
+  `W` / `X` / `` ` `` for the keyboard (list in `desktop/shortcuts.ts`).
+  Windows grow out of their icon and shrink back into it.
+- **History**: opening a window pushes an entry, so Back closes the newest
+  window. "Copy link to this desktop" puts the whole layout in `?windows=`
+  (percentages, so it fits any screen); the same format in `sessionStorage`
+  survives a reload.
+- **Apps get `isFocused` / `isVisible`** (not minimised, under 80% covered, tab
+  shown) so they can pause work nobody can see. Apps with demo data set
+  `resettable` and register a handler in `os/kernel/reset.ts` for the ↺ button.
 - **Apps** use container queries (`@container`, `@3xl:`…), never viewport
   breakpoints, because a window can be narrow on a wide screen. The same
   component then works in a window, on the phone and inside the journey.

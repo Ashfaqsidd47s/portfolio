@@ -175,7 +175,7 @@ export function DesktopIcons({ children }: { children?: React.ReactNode }) {
       launch(app)
     } else if (e.key === "Escape") {
       setSelected(new Set())
-    } else if (ARROWS[e.key]) {
+    } else if (ARROWS[e.key] && !e.shiftKey) {
       e.preventDefault()
       const next = neighbour(layout, app.id, ARROWS[e.key])
       if (!next) return
