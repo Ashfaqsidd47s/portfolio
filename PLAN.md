@@ -712,6 +712,28 @@ horizontal page scroll, no text under 14px, tap targets ≥ 44px.
 
 ---
 
+## Side project · Voice Studio (`/apps/studio`)
+
+A voice lab that runs entirely in the browser, with no backend and no AI
+sound model: break a recording down into numbers (pitch, spectral
+envelope, where the clean speech is), then make speech from those numbers
+with code — the audio version of drawing with SVG. Recordings stay in the
+visitor's browser: nothing is uploaded, and no voice data is ever
+committed to this (public) repo.
+
+| Step | What it does | State |
+| --- | --- | --- |
+| S2 · Analyser | Load audio (+ YouTube `.srt`/`.vtt` captions): pitch track (YIN), spectrogram, clean speech / speech over music / music / silence regions, intro detection, captions on the timeline, and "rebuild from metadata" (a harmonic + noise vocoder) to A/B against the original | ✅ done |
+| S3 · Voicebank | Cut the clean speech into labelled syllables and words using the captions plus onset and pitch-break detection; adjust on the waveform; save to IndexedDB | next — needs consent from the speaker for a real person's voice |
+| S4 · Speaker | Type a sentence: whole words reused from the recording where possible, syllables otherwise, re-pitched and re-timed (TD-PSOLA) and crossfaded | |
+| S1 · Music | Scores as data (tempo, chords, melody, lyrics) played with Tone.js | later |
+| S5 · Quality | The WORLD vocoder compiled to WebAssembly | optional |
+
+Code: `src/apps/studio/` — `dsp/` is DOM-free and unit-tested (captions,
+YIN, regions, resynthesis); the analysis runs in a Web Worker.
+
+---
+
 ## How to add a new project later (target workflow)
 
 1. Add the project to `src/data/profile.ts`.

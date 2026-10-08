@@ -109,6 +109,14 @@ export const appsMeta: AppMeta[] = [
     window: INFO_WINDOW,
   },
   {
+    id: "studio",
+    name: "Voice Studio",
+    description: "See what a voice is made of — pitch, spectrum, clean speech — and hear it rebuilt from those numbers. Runs in your browser.",
+    kind: "side-project",
+    column: "right",
+    window: { width: 1100, height: 760, minWidth: 520, minHeight: 480 },
+  },
+  {
     id: "about",
     name: "About me",
     description: "Who I am, what I work on, and how to reach me.",
