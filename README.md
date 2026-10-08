@@ -80,8 +80,10 @@ src/
 │  ├─ registry/apps-meta.ts   # every app: id, name, window size (plain data, read by vite.config)
 │  ├─ registry/apps.ts        # + icon, tint and lazy loader
 │  ├─ store/windows.ts        # window manager: open/focus/min/max/snap/move/resize (+ tests)
-│  ├─ store/settings.ts       # visitor preferences (click mode, autopilot)
-│  ├─ desktop/                # menu bar, icon columns, windows, URL ⇄ window sync
+│  ├─ store/settings.ts       # visitor preferences (wallpaper, icon layout, click mode, autopilot)
+│  ├─ desktop/                # menu bar, icon grid (+ tests), context menu, windows,
+│  │                          #   boot, screensaver, URL ⇄ window sync
+│  ├─ wallpaper.tsx           # Doon hills, Night desk, Pixel era, Plain (colours in index.css)
 │  ├─ mobile/phone-os.tsx     # status bar, home screen, dock, full-screen apps
 │  ├─ app-host.tsx            # lazy-loads an app with its own error boundary
 │  └─ kernel/                 # seeded randomness, crash-proof localStorage
@@ -134,6 +136,12 @@ src/
 - **Adding an app**: add an entry to `src/os/registry/apps-meta.ts` and its icon
   and loader in `apps.ts`, then build it in `src/apps/<id>/`. It shows up on the
   desktop, the phone, the Windows menu and the sitemap.
+- **Desktop icons** sit on a snap-to grid (`desktop/icon-grid.ts`). Visitors
+  can drag them, rubber-band select them and walk them with the arrow keys;
+  the arrangement is saved per grid size, and "Clean up icons" in the
+  right-click menu resets it.
+- **Wallpapers** are SVG/CSS scenes coloured by `--wp-*` tokens set per
+  wallpaper and theme on the shell's `data-wallpaper` attribute.
 - **Demo data** is seeded (same for every visitor), saved in the visitor's
   browser, and resettable from the app.
 

@@ -1,11 +1,147 @@
 import * as React from "react"
-import { Moon, Sun } from "lucide-react"
+import { Copy, Download, Info, Mail, Moon, Power, Sun } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { Github, Linkedin } from "@/components/icons"
+import { profile } from "@/data/profile"
 import { useTheme } from "@/hooks/use-theme"
 import { cn } from "@/lib/utils"
 import { AppIcon } from "@/os/app-icon"
 import { useClock, useLaunch } from "@/os/hooks"
-import { getApp } from "@/os/registry/apps"
+import { apps, getApp, type AppDef } from "@/os/registry/apps"
 import { selectFocusedId, useWindows, windowsStore } from "@/os/store/windows"
+import { useBoot } from "./boot"
+import { MenuPanel, useDismiss, type MenuEntry } from "./menu"
+
+type MenuDef = { id: string; label: React.ReactNode; title: string; entries: MenuEntry[] }
+
+function useMenus(): MenuDef[] {
+  const launch = useLaunch()
+  const navigate = useNavigate()
+  const startBoot = useBoot((s) => s.start)
+
+  const appEntries = (list: AppDef[]): MenuEntry[] =>
+    list.map((app) => ({ label: app.name, icon: <AppIcon app={app} className="size-4" />, onSelect: () => launch(app) }))
+
+  return [
+    {
+      id: "logo",
+      title: "Ashfaq OS",
+      label: (
+        <>
+          <span className="grid size-6 place-items-center rounded-md bg-foreground text-[0.625rem] font-bold text-background">MA</span>
+          <span className="text-xs font-semibold">Ashfaq OS</span>
+        </>
+      ),
+      entries: [
+        { label: "About this portfolio", icon: <Info className="size-3.5" />, onSelect: () => launch(getApp("about")!) },
+        {
+          type: "link",
+          label: "Download résumé",
+          href: profile.resumeFile,
+          download: profile.resumeFileName,
+          icon: <Download className="size-3.5" />,
+        },
+        { type: "separator" },
+        {
+          label: "Restart…",
+          icon: <Power className="size-3.5" />,
+          onSelect: () => {
+            windowsStore.getState().closeAll()
+            navigate("/", { replace: true })
+            startBoot()
+          },
+        },
+      ],
+    },
+    { id: "projects", title: "Projects", label: "Projects", entries: appEntries(apps.filter((a) => a.kind === "project")) },
+    {
+      id: "side-projects",
+      title: "Side projects",
+      label: "Side projects",
+      entries: appEntries(apps.filter((a) => a.kind === "side-project")),
+    },
+    { id: "apps", title: "Apps", label: "Apps", entries: appEntries(apps.filter((a) => a.kind === "system")) },
+    {
+      id: "contact",
+      title: "Contact",
+      label: "Contact",
+      entries: [
+        { type: "link", label: `Email ${profile.name.split(" ")[0]}`, href: profile.socials.email, icon: <Mail className="size-3.5" /> },
+        {
+          label: "Copy email address",
+          icon: <Copy className="size-3.5" />,
+          onSelect: () => void navigator.clipboard?.writeText(profile.email).catch(() => {}),
+        },
+        { type: "separator" },
+        { type: "link", label: "LinkedIn", href: profile.socials.linkedin, icon: <Linkedin className="size-3.5" /> },
+        { type: "link", label: "GitHub", href: profile.socials.github, icon: <Github className="size-3.5" /> },
+      ],
+    },
+  ]
+}
+
+/**
+ * The left half of the menubar. Works like a real one: click a title to open
+ * its menu, then hover (or ←/→) to move between menus while one is open.
+ */
+function Menus() {
+  const menus = useMenus()
+  const [open, setOpen] = React.useState<{ id: string; keyboard: boolean } | null>(null)
+  const ref = React.useRef<HTMLDivElement>(null)
+  const close = React.useCallback(() => setOpen(null), [])
+  useDismiss(open !== null, ref, close)
+
+  const step = (from: string, dir: -1 | 1) => {
+    const i = menus.findIndex((m) => m.id === from)
+    const next = menus[(i + dir + menus.length) % menus.length]
+    setOpen({ id: next.id, keyboard: true })
+    ref.current?.querySelector<HTMLElement>(`[data-menu="${next.id}"]`)?.focus()
+  }
+
+  return (
+    <nav ref={ref} aria-label="Menu bar" className="flex min-w-0 items-center gap-0.5">
+      {menus.map((menu) => {
+        const isOpen = open?.id === menu.id
+        return (
+          <div key={menu.id} className="relative">
+            <button
+              type="button"
+              data-menu={menu.id}
+              aria-haspopup="menu"
+              aria-expanded={isOpen}
+              title={menu.title}
+              onClick={(e) => setOpen(isOpen ? null : { id: menu.id, keyboard: e.detail === 0 })}
+              onPointerEnter={() => open && !isOpen && setOpen({ id: menu.id, keyboard: false })}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault()
+                  setOpen({ id: menu.id, keyboard: true })
+                }
+              }}
+              className={cn(
+                "flex h-7 items-center gap-2 rounded-md px-2 text-xs font-medium hover:bg-muted",
+                menu.id === "logo" && "pl-1",
+                isOpen && "bg-muted"
+              )}
+            >
+              {menu.label}
+            </button>
+            {isOpen && (
+              <MenuPanel
+                className="absolute left-0 top-9"
+                label={menu.title}
+                entries={menu.entries}
+                autoFocus={open.keyboard}
+                onClose={close}
+                onStep={(dir) => step(menu.id, dir)}
+              />
+            )}
+          </div>
+        )
+      })}
+    </nav>
+  )
+}
 
 /** Lists open windows; picking one restores and focuses it. */
 function WindowsMenu() {
@@ -14,18 +150,27 @@ function WindowsMenu() {
   const launch = useLaunch()
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef<HTMLDivElement>(null)
+  const close = React.useCallback(() => setOpen(false), [])
+  useDismiss(open, ref, close)
 
-  React.useEffect(() => {
-    if (!open) return
-    const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false)
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false)
-    document.addEventListener("pointerdown", onDown)
-    document.addEventListener("keydown", onKey)
-    return () => {
-      document.removeEventListener("pointerdown", onDown)
-      document.removeEventListener("keydown", onKey)
-    }
-  }, [open])
+  const entries: MenuEntry[] =
+    windows.length === 0
+      ? [{ type: "label", label: "No open windows" }]
+      : [
+          ...windows.flatMap<MenuEntry>((w) => {
+            const app = getApp(w.id)
+            if (!app) return []
+            return [
+              {
+                label: `${app.name}${w.minimized ? " (minimised)" : ""}`,
+                checked: w.id === focusedId,
+                onSelect: () => launch(app),
+              },
+            ]
+          }),
+          { type: "separator" },
+          { label: "Close all windows", onSelect: () => windowsStore.getState().closeAll() },
+        ]
 
   return (
     <div ref={ref} className="relative">
@@ -41,71 +186,28 @@ function WindowsMenu() {
           {windows.length}
         </span>
       </button>
-      {open && (
-        <div role="menu" className="absolute right-0 top-9 z-[1000] w-56 rounded-lg border border-border bg-elevated p-1 shadow-lg">
-          {windows.length === 0 ? (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">No open windows</p>
-          ) : (
-            <>
-              {windows.map((w) => {
-                const app = getApp(w.id)
-                if (!app) return null
-                return (
-                  <button
-                    key={w.id}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      launch(app)
-                      setOpen(false)
-                    }}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
-                  >
-                    <AppIcon app={app} className="size-4" />
-                    <span className={cn("flex-1 truncate", w.id === focusedId && "font-semibold")}>{app.name}</span>
-                    {w.minimized && <span className="text-[0.6875rem] text-muted-foreground">minimised</span>}
-                  </button>
-                )
-              })}
-              <div className="my-1 h-px bg-border" />
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  windowsStore.getState().closeAll()
-                  setOpen(false)
-                }}
-                className="w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
-              >
-                Close all windows
-              </button>
-            </>
-          )}
-        </div>
-      )}
+      {open && <MenuPanel className="absolute right-0 top-9 w-56" label="Open windows" entries={entries} onClose={close} />}
     </div>
   )
 }
+
+const HOME_TZ = "Asia/Kolkata"
 
 export function MenuBar() {
   const { theme, toggle } = useTheme()
   const now = useClock()
   const focused = getApp(useWindows(selectFocusedId))
+  const fmt = (opts: Intl.DateTimeFormatOptions) => now.toLocaleString(undefined, opts)
+  const homeTime = fmt({ hour: "2-digit", minute: "2-digit", timeZone: HOME_TZ })
 
   return (
-    <header className="relative z-[900] flex h-10 shrink-0 items-center gap-3 border-b border-border bg-background/85 px-3 backdrop-blur-md">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <span className="grid size-6 place-items-center rounded-md bg-foreground text-[0.625rem] font-bold text-background">MA</span>
-        <span className="text-xs font-semibold">Ashfaq OS</span>
-        {focused && (
-          <>
-            <span className="text-border-strong" aria-hidden>
-              /
-            </span>
-            <span className="truncate text-xs text-muted-foreground">{focused.name}</span>
-          </>
-        )}
-      </div>
+    <header className="relative z-[900] flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background/85 px-2 backdrop-blur-md">
+      <Menus />
+      {focused && (
+        <span className="hidden min-w-0 truncate border-l border-border pl-3 text-xs text-muted-foreground sm:inline">
+          {focused.name}
+        </span>
+      )}
       <div className="ml-auto flex items-center gap-1">
         <WindowsMenu />
         <button
@@ -119,10 +221,9 @@ export function MenuBar() {
         <time
           dateTime={now.toISOString()}
           className="px-2 text-xs tabular-nums text-muted-foreground"
-          title={now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
+          title={`${fmt({ weekday: "long", day: "numeric", month: "long" })} · ${homeTime} in Dehradun`}
         >
-          {now.toLocaleDateString(undefined, { weekday: "short" })}{" "}
-          {now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+          {fmt({ weekday: "short" })} {fmt({ hour: "2-digit", minute: "2-digit" })}
         </time>
       </div>
     </header>

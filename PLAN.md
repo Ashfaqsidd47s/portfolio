@@ -20,7 +20,8 @@ and can be merged on its own. Tick boxes as they land.
 | ----- | ----- | ----- |
 | 1 · Foundation | ✅ done | Plus early slices of chunks 2, 3 and 9 (a working desktop, windows and phone home screen), so the first app can be used. |
 | First app · TrypNow | ✅ done | Full app: supplier + agent sides, dashboard, package builder, AI listing, bookings, marketplace. |
-| 2 – 11 | ⏳ next | Items below marked _partly done_ have a basic version in place. |
+| 2 · Desktop shell | ✅ done | Wallpapers, icon grid (drag, rubber band, arrow keys), context menu, full menubar, boot, screensaver. Pieces that depend on later chunks are noted inline. |
+| 3 – 11 | ⏳ next | Phase 3 (window manager) is next. Items below marked _partly done_ have a basic version in place. |
 
 ---
 
@@ -294,34 +295,58 @@ every TrypNow flow with no console errors.
 
 - [x] **Layout** like §1.1: `h-dvh` column, menubar, desktop viewport with
       `overflow-clip` that is the drag-constraints ref.
-- [ ] _Partly done: "Doon hills", light and dark._ **Wallpapers** — 3–4 original scenes (e.g. "Dehradun hills", "Night desk",
+- [x] **Wallpapers** — 3–4 original scenes (e.g. "Dehradun hills", "Night desk",
       "Pixel era" that nods to the journey, plain colour). Each has light/dark
       variants and an icon-glow colour. SVG/CSS where possible, one optimised
       WebP each otherwise (< 150 KB).
+      _Doon hills, Night desk, Pixel era and Plain: all SVG/CSS, light and dark,
+      each with its own `--wp-glow`. Tokens sit on the shell root
+      (`data-wallpaper`), so the phone shell uses the same wallpaper._
 - [x] **Desktop icons** — left column: work projects (TrypNow, SureGem, 11Jobs,
       11Matrix). Right column: side projects + system (Fujin, Bingo Master, Gaming
       Era, File Scanner, About me, Résumé, Contact, Terminal, Journey, Trash).
       Columns wrap into extra columns on short screens (`flex-col flex-wrap`,
       `wrap-reverse` on the right).
-- [ ] _Partly done: select, double-click, single-click mode, Enter, tap on touch, preload on hover. Arrow keys still to do._ Icon interactions: single-click selects, double-click (or single-click when
+      _Icons now sit on a snap-to grid (`os/desktop/icon-grid.ts`, unit-tested)
+      that fills the same way. Contact, Terminal and Trash get icons when
+      their apps land in Phase 8._
+- [x] Icon interactions: single-click selects, double-click (or single-click when
       the setting says so) opens; Enter opens the selected icon; arrow keys move
       selection; labels truncate to two lines with full name in a tooltip.
-- [ ] Icons are **draggable** on the desktop; positions persist per viewport size.
-- [ ] **Rubber-band selection** on empty desktop (direct style writes, no re-render
+      _Also Shift/⌘-click to add to the selection, Esc to clear._
+- [x] Icons are **draggable** on the desktop; positions persist per viewport size.
+      _Drag one icon or the whole selection; drops snap to the grid and never
+      stack. Saved per grid size in settings; "Clean up icons" resets it._
+- [x] **Rubber-band selection** on empty desktop (direct style writes, no re-render
       per pointer move — PostHog's trick).
-- [ ] **Right-click context menu**: Open, Change wallpaper, Sort icons, Display
+- [x] **Right-click context menu**: Open, Change wallpaper, Sort icons, Display
       settings, About this portfolio.
-- [ ] _Partly done: brand, focused app name, Windows menu, theme toggle, clock._ **Menubar** — left: my logo/initials menu (About this OS, Settings, Restart
+      _On an icon it adds Open live site / View code. Display settings are
+      inline toggles (dark mode, one-click open) until the Settings app
+      lands in Phase 8. Inside windows the browser's own menu stays._
+- [x] **Menubar** — left: my logo/initials menu (About this OS, Settings, Restart
       → replays boot, Download résumé); menus *Projects*, *Side projects*, *Apps*,
       *Contact*. Right tray: autopilot toggle (▶/⏸), search (⌘K), theme, active
       windows button with count, clock (local time + "Dehradun" time tooltip).
-- [ ] **Boot sequence** (first visit only, skippable, ~1.5s): logo → progress bar →
+      _Done: logo menu (About this portfolio, Download résumé, Restart), the
+      four menus with click-then-hover switching and ←/→/↓ keys, Windows
+      menu, theme, clock with Dehradun time. Still to come with their
+      chunks: the autopilot toggle (Phase 4), search (Phase 10) and a
+      Settings entry (Phase 8)._
+- [x] **Boot sequence** (first visit only, skippable, ~1.5s): logo → progress bar →
       desktop fades in. Reuse the terminal-boot idea from `app-window.tsx`.
-- [ ] **Screensaver** after 90s idle *when autopilot is off* (otherwise autopilot is
+      _Deep links (`/apps/:id`) skip it; Restart replays it._
+- [x] **Screensaver** after 90s idle *when autopilot is off* (otherwise autopilot is
       the screensaver).
+      _Idle only counts while the tab is visible. Phase 4 must also switch
+      it off while the autopilot is driving (see the note in `desktop.tsx`)._
 
 **Done when:** the desktop renders with icons, menus, wallpaper switching and theme
-toggle; double-clicking an icon logs `open(appId)`.
+toggle; double-clicking an icon logs `open(appId)`. ✅ Build, lint and 23 unit
+tests pass. A Playwright pass at 1440×900, 800×600 and 390×844 drove boot,
+skip, every wallpaper in both themes, icon drag + persistence + clean up,
+rubber band, arrow keys, context menus, menubar menus, Restart, deep links
+and the screensaver, with no console errors.
 
 ---
 
