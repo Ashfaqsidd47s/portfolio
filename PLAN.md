@@ -724,13 +724,17 @@ committed to this (public) repo.
 | Step | What it does | State |
 | --- | --- | --- |
 | S2 · Analyser | Load audio (+ YouTube `.srt`/`.vtt` captions): pitch track (YIN), spectrogram, clean speech / speech over music / music / silence regions, intro detection, captions on the timeline, and "rebuild from metadata" (a harmonic + noise vocoder) to A/B against the original | ✅ done |
-| S3 · Voicebank | Cut the clean speech into labelled syllables and words using the captions plus onset and pitch-break detection; adjust on the waveform; save to IndexedDB | next — needs consent from the speaker for a real person's voice |
-| S4 · Speaker | Type a sentence: whole words reused from the recording where possible, syllables otherwise, re-pitched and re-timed (TD-PSOLA) and crossfaded | |
+| S3 · Voicebank | Cut the speech into labelled words and syllables: captions give the words, loudness peaks give the syllables, words are laid onto the peaks by syllable count and cut at the dips. Cuts of a believable length are trusted more. Browse every word, hear it, nudge or remove bad cuts. Saved in IndexedDB | ✅ done |
+| S4 · Speak | Type Hindi script or Roman Hinglish (or pick a ready-made line). Each word is her own recording when she said it (Roman matched by a sound-alike key plus a list of common words), else built from her syllables (exact → same opening sound → sound-alike → closed syllables get their final consonant). Natural (spliced) or Smooth (vocoder, one pitch line) voice, word gap, colour-coded words, WAV download | ✅ done |
 | S1 · Music | Scores as data (tempo, chords, melody, lyrics) played with Tone.js | later |
 | S5 · Quality | The WORLD vocoder compiled to WebAssembly | optional |
 
 Code: `src/apps/studio/` — `dsp/` is DOM-free and unit-tested (captions,
-YIN, regions, resynthesis); the analysis runs in a Web Worker.
+YIN, regions, resynthesis, Hindi syllables and sound-alike keys, voicebank
+cutting, speaking); the analysis runs in a Web Worker.
+
+**To remove the Studio later:** delete `src/apps/studio/`, its two entries in
+`src/os/registry/` (`apps-meta.ts`, `apps.ts`) and this section.
 
 ---
 
