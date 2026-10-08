@@ -1,12 +1,12 @@
 import * as React from "react"
 import { AnimatePresence } from "motion/react"
-import { useLocation, useNavigate } from "react-router-dom"
+import { useLocation, useNavigate, useNavigationType } from "react-router-dom"
 import { profile } from "@/data/profile"
 import { AppIcon } from "@/os/app-icon"
-import { openWindowFor, useLaunch } from "@/os/hooks"
+import { closeWindow, openWindowFor, useLaunch, type OsHistoryState } from "@/os/hooks"
 import { getApp, type AppDef } from "@/os/registry/apps"
 import { useSettings } from "@/os/store/settings"
-import { selectFocusedId, useWindows, windowsStore } from "@/os/store/windows"
+import { parseLayout, selectFocusedId, serializeLayout, useWindows, visibleWindowIds, windowsStore } from "@/os/store/windows"
 import { Wallpaper, useWallpaper } from "@/os/wallpaper"
 import { BootScreen, useBoot } from "./boot"
 import { useDesktopContextMenu } from "./context-menu"
@@ -14,6 +14,7 @@ import { DesktopIcons } from "./desktop-icons"
 import { MenuBar } from "./menubar"
 import { OsWindow } from "./os-window"
 import { Screensaver, useIdle } from "./screensaver"
+import { useShortcuts } from "./shortcuts"
 
 /** How long the desk sits untouched before the screensaver starts. */
 const SCREENSAVER_AFTER = 90_000
@@ -21,18 +22,84 @@ const SCREENSAVER_AFTER = 90_000
 /** The only component subscribed to the window list, so opening one doesn't re-render the desktop. */
 const WindowList = React.memo(function WindowList() {
   const windows = useWindows((s) => s.windows)
+  const bounds = useWindows((s) => s.bounds)
   const focusedId = useWindows(selectFocusedId)
+  const tabVisible = useTabVisible()
+  const visible = React.useMemo(() => visibleWindowIds(windows, bounds), [windows, bounds])
   return (
     <AnimatePresence>
       {windows.map((w) => {
         const app = getApp(w.id)
         return app ? (
-          <OsWindow key={w.id} app={app} win={w} focused={w.id === focusedId} />
+          <OsWindow key={w.id} app={app} win={w} focused={w.id === focusedId} visible={tabVisible && visible.has(w.id)} />
         ) : null
       })}
     </AnimatePresence>
   )
 })
+
+function subscribeVisibility(onChange: () => void) {
+  document.addEventListener("visibilitychange", onChange)
+  return () => document.removeEventListener("visibilitychange", onChange)
+}
+
+function useTabVisible() {
+  return React.useSyncExternalStore(subscribeVisibility, () => document.visibilityState === "visible", () => true)
+}
+
+const SESSION_KEY = "os:session:v1"
+
+/**
+ * Brings back a window layout: a shared one from `?windows=` (then drops the
+ * parameter so the URL stays clean), or this tab's own one after a reload or
+ * Back/Forward into the site. Keeps this tab's copy up to date as it changes.
+ */
+function useLayoutRestore() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const done = React.useRef(false)
+
+  React.useLayoutEffect(() => {
+    // Once, on load.
+    if (done.current) return
+    done.current = true
+    const params = new URLSearchParams(location.search)
+    const shared = params.get("windows")
+    const navType = (performance.getEntriesByType?.("navigation")[0] as PerformanceNavigationTiming | undefined)?.type
+    let saved = parseLayout(shared)
+    if (shared === null && (navType === "reload" || navType === "back_forward")) {
+      try {
+        saved = parseLayout(window.sessionStorage.getItem(SESSION_KEY))
+      } catch {
+        /* no session storage: start empty */
+      }
+    }
+    if (saved.length > 0) {
+      windowsStore.getState().restoreLayout(saved, (id) => {
+        const app = getApp(id)
+        return app && !app.href ? { width: app.window.minWidth, height: app.window.minHeight } : undefined
+      })
+    }
+    if (shared !== null) {
+      params.delete("windows")
+      const search = params.toString()
+      navigate({ pathname: location.pathname, search: search ? `?${search}` : "" }, { replace: true, state: location.state })
+    }
+  }, [navigate, location.pathname, location.search, location.state])
+
+  React.useEffect(
+    () =>
+      windowsStore.subscribe((s) => {
+        try {
+          window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(serializeLayout(s.windows, s.bounds)))
+        } catch {
+          /* non-fatal */
+        }
+      }),
+    []
+  )
+}
+
 
 /** A desktop widget that says who this is and how to drive the OS. */
 function Welcome({ onChangeWallpaper }: { onChangeWallpaper: () => void }) {
@@ -80,6 +147,8 @@ function Welcome({ onChangeWallpaper }: { onChangeWallpaper: () => void }) {
 /**
  * Keeps the URL and the windows in step, both ways:
  * - /apps/:id opens (or focuses) that window — on load, from links, on Back.
+ * - Opening a window pushes a history entry tagged with it, so Back closes
+ *   the window that entry opened (newest first), then lands on the one below.
  * - Focusing, closing or minimising a window rewrites the URL to the window
  *   now on top, without adding history entries.
  */
@@ -94,16 +163,33 @@ function useUrlSync(routeApp: AppDef | undefined) {
     expected.current = location.pathname
   }, [location.pathname])
 
-  const loaded = React.useRef(false)
+  const navType = useNavigationType()
+  const state = location.state as OsHistoryState
+  const current = React.useRef<{ state: OsHistoryState; idx: number } | null>(null)
   React.useEffect(() => {
-    // Our own focus-driven rewrites (below) can land after the window they
-    // name was closed; they must never reopen it. History state survives a
-    // reload, so the first run always opens.
-    const ownRewrite = loaded.current && (location.state as { fromFocus?: boolean } | null)?.fromFocus
-    loaded.current = true
-    if (ownRewrite) return
+    const left = current.current
+    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0
+    current.current = { state, idx }
+    const first = left === null
+
+    if (!first && navType === "POP") {
+      // Back: close the window the entry we just left had opened.
+      if (idx < left.idx && left.state?.opened && left.state.opened !== routeApp?.id) closeWindow(left.state.opened)
+      // Landed on the bare desktop with a window still on top: name it in the URL.
+      const top = selectFocusedId(windowsStore.getState())
+      if (!routeApp && top) {
+        expected.current = `/apps/${top}`
+        navigate(expected.current, { replace: true, state: { fromFocus: true, ...(state?.opened && { opened: state.opened }) } })
+        return
+      }
+    } else if (!first && state?.fromFocus) {
+      // Our own focus-driven rewrites (below) can land after the window they
+      // name was closed; they must never reopen it. History state survives a
+      // reload, so the first run always opens.
+      return
+    }
     if (routeApp && !routeApp.href) openWindowFor(routeApp)
-  }, [routeApp, location.key, location.state])
+  }, [routeApp, location.key, state, navType, navigate])
 
   // Only a change of focus may rewrite the URL. `navigate` changes identity on
   // every navigation, so without this guard a new URL would be "corrected"
@@ -115,7 +201,9 @@ function useUrlSync(routeApp: AppDef | undefined) {
     const target = focusedId ? `/apps/${focusedId}` : "/"
     if (expected.current === target) return
     expected.current = target
-    navigate(target, { replace: true, state: { fromFocus: true } })
+    // Keep the entry's `opened` tag, so Back still closes that window.
+    const opened = current.current?.state?.opened
+    navigate(target, { replace: true, state: { fromFocus: true, ...(opened && { opened }) } satisfies OsHistoryState })
   }, [focusedId, navigate])
 }
 
@@ -132,7 +220,9 @@ export function DesktopOS({ routeApp }: { routeApp?: AppDef }) {
     return () => ro.disconnect()
   }, [])
 
+  useLayoutRestore()
   useUrlSync(routeApp)
+  useShortcuts()
 
   const wallpaper = useWallpaper()
   const booting = useBoot((s) => s.booting)
@@ -146,7 +236,7 @@ export function DesktopOS({ routeApp }: { routeApp?: AppDef }) {
     <div data-wallpaper={wallpaper} className="fixed inset-0 flex flex-col overflow-hidden bg-background">
       <Wallpaper />
       <MenuBar />
-      <div ref={viewportRef} onContextMenu={onContextMenu} className="relative min-h-0 flex-1 overflow-clip">
+      <div ref={viewportRef} data-desktop onContextMenu={onContextMenu} className="relative min-h-0 flex-1 overflow-clip">
         <DesktopIcons>
           <Welcome onChangeWallpaper={cycleWallpaper} />
         </DesktopIcons>

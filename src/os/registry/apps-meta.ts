@@ -26,6 +26,8 @@ export type AppMeta = {
   project?: string
   /** Opens a full page instead of a window (the journey, the printable résumé). */
   href?: string
+  /** Has demo data the window's ↺ button can put back to its seed (see `os/kernel/reset.ts`). */
+  resettable?: boolean
   window: WindowDefaults
 }
 
@@ -40,6 +42,7 @@ export const appsMeta: AppMeta[] = [
     kind: "project",
     column: "left",
     project: "TrypNow",
+    resettable: true,
     window: PROJECT_WINDOW,
   },
   {

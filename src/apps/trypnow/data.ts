@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import { onReset } from "@/os/kernel/reset"
 import { createRng } from "@/os/kernel/rng"
 import { safeStorage } from "@/os/kernel/storage"
 
@@ -256,3 +257,5 @@ export function timeAgo(iso: string, now = Date.now()) {
   if (hours < 24) return `${hours}h ago`
   return `${Math.round(hours / 24)}d ago`
 }
+
+onReset("trypnow", () => useTrypNow.getState().reset())

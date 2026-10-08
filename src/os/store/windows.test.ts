@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CASCADE, createWindowsStore, selectFocusedId } from "./windows"
+import { CASCADE, createWindowsStore, parseLayout, selectFocusedId, serializeLayout, visibleWindowIds } from "./windows"
 
 const BOUNDS = { width: 1200, height: 800 }
 const opts = { size: { width: 600, height: 400 }, minSize: { width: 300, height: 200 } }
@@ -110,5 +110,71 @@ describe("windows store", () => {
     const { rect } = store.getState().windows[0]
     expect(rect.x).toBeLessThan(800)
     expect(rect.y).toBeLessThan(600)
+  })
+
+  it("restore undoes maximise, then snap, then minimises", () => {
+    const store = setup("a")
+    const { maximize, restore, snap } = store.getState()
+    const original = store.getState().windows[0].rect
+    maximize("a")
+    restore("a")
+    expect(store.getState().windows[0]).toMatchObject({ maximized: false, rect: original })
+    snap("a", "left")
+    restore("a")
+    expect(store.getState().windows[0]).toMatchObject({ snapped: false, rect: original })
+    restore("a")
+    expect(store.getState().windows[0].minimized).toBe(true)
+  })
+
+  it("detaching a maximised window keeps the grabbed spot under the pointer", () => {
+    const store = setup("a")
+    store.getState().maximize("a")
+    // Grab the title bar three quarters of the way across the screen.
+    const rect = store.getState().detach("a", { x: 900, y: 10 })!
+    expect(rect.width).toBe(600)
+    expect((900 - rect.x) / rect.width).toBeCloseTo(0.75, 1)
+    expect(store.getState().windows[0].maximized).toBe(false)
+  })
+
+  it("cycle brings the bottom window to the front", () => {
+    const store = setup("a", "b", "c")
+    store.getState().cycle()
+    expect(selectFocusedId(store.getState())).toBe("a")
+    store.getState().cycle()
+    expect(selectFocusedId(store.getState())).toBe("b")
+  })
+
+  it("round-trips a layout through percentages, on another screen size", () => {
+    const store = setup("a", "b")
+    store.getState().snap("b", "right")
+    store.getState().focus("a")
+    const saved = parseLayout(JSON.stringify(serializeLayout(store.getState().windows, BOUNDS)))
+    const other = createWindowsStore({ width: 2400, height: 1600 })
+    other.getState().restoreLayout(saved, () => opts.minSize)
+    const [b, a] = other.getState().windows
+    expect(a).toMatchObject({ id: "a", z: 2, rect: { x: 600, y: 400, width: 1200, height: 800 } })
+    expect(b).toMatchObject({ id: "b", snapped: "right", rect: { x: 1200, y: 0, width: 1200, height: 1600 } })
+    other.getState().restore("b")
+    expect(other.getState().windows[0].rect.width).toBe(1200)
+  })
+
+  it("ignores unknown apps and malformed layouts", () => {
+    expect(parseLayout("not json")).toEqual([])
+    expect(parseLayout('[{"id":"a","x":"1"}]')).toEqual([])
+    const store = createWindowsStore(BOUNDS)
+    store.getState().restoreLayout([{ id: "nope", x: 0, y: 0, w: 50, h: 50 }], () => undefined)
+    expect(store.getState().windows).toEqual([])
+  })
+
+  it("treats minimised and mostly covered windows as hidden", () => {
+    const store = setup("a", "b", "c")
+    const { move, maximize, minimize } = store.getState()
+    move("a", { x: 0, y: 0 })
+    move("b", { x: 600, y: 400 })
+    expect(visibleWindowIds(store.getState().windows, BOUNDS)).toEqual(new Set(["a", "b", "c"]))
+    maximize("c")
+    expect(visibleWindowIds(store.getState().windows, BOUNDS)).toEqual(new Set(["c"]))
+    minimize("c")
+    expect(visibleWindowIds(store.getState().windows, BOUNDS)).toEqual(new Set(["a", "b"]))
   })
 })

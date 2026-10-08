@@ -24,11 +24,30 @@ export type WindowState = {
   minimized: boolean
   maximized: boolean
   snapped: SnapSide | false
+  /** Centre of the icon the window grew out of, so it can shrink back into it. */
+  origin?: Point
 }
 
 export type OpenOptions = {
   size: Size
   minSize: Size
+  origin?: Point
+}
+
+/**
+ * A window in a shared or saved layout. Geometry is in percent of the
+ * desktop, so the layout fits whatever screen opens it (posthog.com's
+ * `?windows=` format). Listed bottom to top.
+ */
+export type SavedWindow = {
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+  min?: 1
+  max?: 1
+  snap?: SnapSide
 }
 
 type State = {
@@ -45,7 +64,19 @@ type Actions = {
   focus: (id: string) => void
   minimize: (id: string) => void
   toggleMaximize: (id: string) => void
+  maximize: (id: string) => void
+  /** Undo maximise or snap; a window that is neither gets minimised. */
+  restore: (id: string) => void
   snap: (id: string, side: SnapSide) => void
+  /**
+   * Un-maximise or un-snap a window that is being dragged, keeping the same
+   * spot of its title bar under the pointer. Returns the new rect.
+   */
+  detach: (id: string, pointer: Point) => Rect | undefined
+  /** Bring the bottom-most visible window to the front (Alt+Tab-style). */
+  cycle: () => void
+  /** Replace every window with a saved layout; `defaults` gives each app's min size. */
+  restoreLayout: (saved: SavedWindow[], minSizeFor: (id: string) => Size | undefined) => void
   move: (id: string, position: Point) => void
   resize: (id: string, rect: Rect) => void
 }
@@ -126,7 +157,7 @@ export function createWindowsStore(initialBounds: Size = { width: 1280, height: 
         }))
       },
 
-      open: (id, { size, minSize }) => {
+      open: (id, { size, minSize, origin }) => {
         const existing = get().windows.find((w) => w.id === id)
         if (existing) {
           if (existing.minimized) update(id, (w) => ({ ...w, minimized: false }))
@@ -142,6 +173,7 @@ export function createWindowsStore(initialBounds: Size = { width: 1280, height: 
             minimized: false,
             maximized: false,
             snapped: false,
+            origin,
           }
           return { windows: [...s.windows, window] }
         })
@@ -169,6 +201,68 @@ export function createWindowsStore(initialBounds: Size = { width: 1280, height: 
             : { ...w, maximized: true, snapped: false, restoreRect: w.snapped ? w.restoreRect : w.rect }
         )
         get().focus(id)
+      },
+
+      maximize: (id) => {
+        const w = get().windows.find((w) => w.id === id)
+        if (w && !w.maximized) get().toggleMaximize(id)
+        else get().focus(id)
+      },
+
+      restore: (id) => {
+        const w = get().windows.find((w) => w.id === id)
+        if (!w) return
+        if (w.maximized) get().toggleMaximize(id)
+        else if (w.snapped)
+          update(id, (w) => ({ ...w, snapped: false, rect: w.restoreRect ?? w.rect, restoreRect: undefined }))
+        else get().minimize(id)
+      },
+
+      detach: (id, pointer) => {
+        const { bounds, windows } = get()
+        const w = windows.find((w) => w.id === id)
+        if (!w || (!w.maximized && !w.snapped)) return w?.rect
+        const current = w.maximized ? { x: 0, y: 0, ...bounds } : w.rect
+        const size = w.restoreRect ?? w.rect
+        // Keep the grabbed point at the same fraction of the title bar.
+        const ratio = (pointer.x - current.x) / current.width
+        const rect = {
+          ...clampPosition({ x: Math.round(pointer.x - ratio * size.width), y: Math.max(0, pointer.y - TITLE_BAR / 2) }, size, bounds),
+          width: size.width,
+          height: size.height,
+        }
+        update(id, (w) => ({ ...w, maximized: false, snapped: false, restoreRect: undefined, rect }))
+        return rect
+      },
+
+      cycle: () => {
+        const visible = get().windows.filter((w) => !w.minimized)
+        if (visible.length < 2) return
+        get().focus(visible.reduce((a, b) => (b.z < a.z ? b : a)).id)
+      },
+
+      restoreLayout: (saved, minSizeFor) => {
+        const { bounds } = get()
+        const pct = (n: number, of: number) => Math.round((n / 100) * of)
+        const windows: WindowState[] = []
+        for (const entry of saved) {
+          const minSize = minSizeFor(entry.id)
+          if (!minSize || windows.some((w) => w.id === entry.id)) continue
+          const width = clamp(pct(entry.w, bounds.width), minSize.width, bounds.width)
+          const height = clamp(pct(entry.h, bounds.height), minSize.height, bounds.height)
+          const free = { ...clampPosition({ x: pct(entry.x, bounds.width), y: pct(entry.y, bounds.height) }, { width, height }, bounds), width, height }
+          windows.push({
+            id: entry.id,
+            z: windows.length + 1,
+            rect: entry.snap ? snapRect(entry.snap, bounds) : free,
+            restoreRect: entry.snap || entry.max ? free : undefined,
+            minSize,
+            minimized: Boolean(entry.min),
+            maximized: Boolean(entry.max) && !entry.snap,
+            snapped: entry.snap ?? false,
+          })
+        }
+        set({ windows })
       },
 
       snap: (id, side) => {
@@ -223,6 +317,75 @@ export function createWindowsStore(initialBounds: Size = { width: 1280, height: 
 export function snapRect(side: SnapSide, bounds: Size): Rect {
   const width = Math.floor(bounds.width / 2)
   return { x: side === "left" ? 0 : bounds.width - width, y: 0, width, height: bounds.height }
+}
+
+/** The rect a window actually covers on screen. */
+export const screenRect = (w: WindowState, bounds: Size): Rect => (w.maximized ? { x: 0, y: 0, ...bounds } : w.rect)
+
+/** Above this share covered by other windows, a window counts as hidden. */
+export const OCCLUDED = 0.8
+
+/**
+ * Ids of windows a visitor can actually see: not minimised and less than
+ * 80% covered by the windows above them. Coverage is sampled on a 10×10
+ * grid, which is plenty for a pause/resume decision.
+ */
+export function visibleWindowIds(windows: WindowState[], bounds: Size): Set<string> {
+  const shown = windows.filter((w) => !w.minimized)
+  const visible = new Set<string>()
+  const N = 10
+  for (const w of shown) {
+    const r = screenRect(w, bounds)
+    const above = shown.filter((o) => o.z > w.z).map((o) => screenRect(o, bounds))
+    let covered = 0
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < N; j++) {
+        const px = r.x + ((i + 0.5) / N) * r.width
+        const py = r.y + ((j + 0.5) / N) * r.height
+        if (above.some((a) => px >= a.x && px < a.x + a.width && py >= a.y && py < a.y + a.height)) covered++
+      }
+    }
+    if (covered / (N * N) <= OCCLUDED) visible.add(w.id)
+  }
+  return visible
+}
+
+/** The layout as percentages of the desktop, bottom window first. */
+export function serializeLayout(windows: WindowState[], bounds: Size): SavedWindow[] {
+  const pct = (n: number, of: number) => Math.round((n / of) * 10000) / 100
+  return [...windows]
+    .sort((a, b) => a.z - b.z)
+    .map((w) => {
+      // Maximised and snapped windows remember the rect they go back to.
+      const r = (w.maximized || w.snapped) && w.restoreRect ? w.restoreRect : w.rect
+      return {
+        id: w.id,
+        x: pct(r.x, bounds.width),
+        y: pct(r.y, bounds.height),
+        w: pct(r.width, bounds.width),
+        h: pct(r.height, bounds.height),
+        ...(w.minimized && { min: 1 as const }),
+        ...(w.maximized && { max: 1 as const }),
+        ...(w.snapped && { snap: w.snapped }),
+      }
+    })
+}
+
+/** Parse a `?windows=` value; anything malformed yields an empty layout. */
+export function parseLayout(raw: string | null): SavedWindow[] {
+  if (!raw) return []
+  try {
+    const data: unknown = JSON.parse(raw)
+    if (!Array.isArray(data)) return []
+    const num = (n: unknown) => typeof n === "number" && Number.isFinite(n)
+    return data.filter(
+      (e): e is SavedWindow =>
+        typeof e === "object" && e !== null && typeof e.id === "string" && num(e.x) && num(e.y) && num(e.w) && num(e.h) &&
+        (e.snap === undefined || e.snap === "left" || e.snap === "right")
+    )
+  } catch {
+    return []
+  }
 }
 
 /** The focused window: highest z among the ones that aren't minimised. */

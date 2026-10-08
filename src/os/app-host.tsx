@@ -51,7 +51,17 @@ function AppLoading({ name }: { name: string }) {
 }
 
 /** Loads and runs one app, isolated so a crash only takes down its own window. */
-export function AppHost({ app, isPhone }: { app: AppDef; isPhone: boolean }) {
+export function AppHost({
+  app,
+  isPhone,
+  isFocused = true,
+  isVisible = true,
+}: {
+  app: AppDef
+  isPhone: boolean
+  isFocused?: boolean
+  isVisible?: boolean
+}) {
   const Component = lazyApps.get(app.id)
   if (!Component) return null
   return (
@@ -59,7 +69,7 @@ export function AppHost({ app, isPhone }: { app: AppDef; isPhone: boolean }) {
       <React.Suspense fallback={<AppLoading name={app.name} />}>
         {/* Looked up, not created: each lazy component is built once at module load. */}
         {/* oxlint-disable-next-line react/static-components */}
-        <Component appId={app.id} isPhone={isPhone} />
+        <Component appId={app.id} isPhone={isPhone} isFocused={isFocused} isVisible={isVisible} />
       </React.Suspense>
     </AppErrorBoundary>
   )
