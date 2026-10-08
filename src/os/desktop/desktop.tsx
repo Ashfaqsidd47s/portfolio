@@ -5,11 +5,18 @@ import { profile } from "@/data/profile"
 import { AppIcon } from "@/os/app-icon"
 import { openWindowFor, useLaunch } from "@/os/hooks"
 import { getApp, type AppDef } from "@/os/registry/apps"
+import { useSettings } from "@/os/store/settings"
 import { selectFocusedId, useWindows, windowsStore } from "@/os/store/windows"
-import { Wallpaper } from "@/os/wallpaper"
+import { Wallpaper, useWallpaper } from "@/os/wallpaper"
+import { BootScreen, useBoot } from "./boot"
+import { useDesktopContextMenu } from "./context-menu"
 import { DesktopIcons } from "./desktop-icons"
 import { MenuBar } from "./menubar"
 import { OsWindow } from "./os-window"
+import { Screensaver, useIdle } from "./screensaver"
+
+/** How long the desk sits untouched before the screensaver starts. */
+const SCREENSAVER_AFTER = 90_000
 
 /** The only component subscribed to the window list, so opening one doesn't re-render the desktop. */
 const WindowList = React.memo(function WindowList() {
@@ -28,7 +35,7 @@ const WindowList = React.memo(function WindowList() {
 })
 
 /** A desktop widget that says who this is and how to drive the OS. */
-function Welcome() {
+function Welcome({ onChangeWallpaper }: { onChangeWallpaper: () => void }) {
   const launch = useLaunch()
   const featured = getApp("trypnow")!
   return (
@@ -41,6 +48,13 @@ function Welcome() {
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
           {profile.role} in {profile.location}. Every project on this desktop is an app you can open and actually use —
           double-click one to start.
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Drag icons around, right-click the desktop for options, or{" "}
+          <button type="button" onClick={onChangeWallpaper} className="font-medium text-foreground underline underline-offset-2">
+            change the wallpaper
+          </button>
+          .
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
@@ -120,15 +134,29 @@ export function DesktopOS({ routeApp }: { routeApp?: AppDef }) {
 
   useUrlSync(routeApp)
 
+  const wallpaper = useWallpaper()
+  const booting = useBoot((s) => s.booting)
+  // Phase 4: while the autopilot is driving it *is* the screensaver, so this
+  // will also wait for the autopilot to be off or handed over.
+  const idle = useIdle(SCREENSAVER_AFTER, !booting)
+  const cycleWallpaper = useSettings((s) => s.cycleWallpaper)
+  const { onContextMenu, menu } = useDesktopContextMenu()
+
   return (
-    <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
+    <div data-wallpaper={wallpaper} className="fixed inset-0 flex flex-col overflow-hidden bg-background">
       <Wallpaper />
       <MenuBar />
-      <div ref={viewportRef} className="relative min-h-0 flex-1 overflow-clip">
-        <Welcome />
-        <DesktopIcons />
+      <div ref={viewportRef} onContextMenu={onContextMenu} className="relative min-h-0 flex-1 overflow-clip">
+        <DesktopIcons>
+          <Welcome onChangeWallpaper={cycleWallpaper} />
+        </DesktopIcons>
         <WindowList />
+        {menu}
       </div>
+      <AnimatePresence>
+        {booting && <BootScreen key="boot" />}
+        {idle && !booting && <Screensaver key="screensaver" />}
+      </AnimatePresence>
     </div>
   )
 }

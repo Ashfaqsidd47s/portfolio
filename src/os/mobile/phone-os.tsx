@@ -7,7 +7,7 @@ import { AppHost, preloadApp } from "@/os/app-host"
 import { AppIcon } from "@/os/app-icon"
 import { useClock, useLaunch } from "@/os/hooks"
 import { apps, getApp, type AppDef } from "@/os/registry/apps"
-import { Wallpaper } from "@/os/wallpaper"
+import { Wallpaper, useWallpaper } from "@/os/wallpaper"
 
 const DOCK = ["about", "resume", "journey"]
 
@@ -186,8 +186,9 @@ function AppScreen({ app }: { app: AppDef }) {
  * the browser's Back button closes the app.
  */
 export function PhoneOS({ routeApp }: { routeApp?: AppDef }) {
+  const wallpaper = useWallpaper()
   return (
-    <div className="fixed inset-0 overflow-hidden bg-background text-foreground">
+    <div data-wallpaper={wallpaper} className="fixed inset-0 overflow-hidden bg-background text-foreground">
       <Wallpaper />
       <HomeScreen />
       <AnimatePresence>{routeApp && !routeApp.href && <AppScreen key={routeApp.id} app={routeApp} />}</AnimatePresence>
