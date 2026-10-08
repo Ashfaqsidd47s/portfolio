@@ -84,6 +84,8 @@ src/
 │  ├─ desktop/                # menu bar, icon grid (+ tests), context menu, windows,
 │  │                          #   boot, screensaver, URL ⇄ window sync
 │  ├─ wallpaper.tsx           # Doon hills, Night desk, Pixel era, Plain (colours in index.css)
+│  ├─ autopilot/              # the self-driving tour: engine, fake cursor, controls,
+│  │                          #   run.ts (DOM-free playlist loop, + tests), scripts/
 │  ├─ mobile/phone-os.tsx     # status bar, home screen, dock, full-screen apps
 │  ├─ app-host.tsx            # lazy-loads an app with its own error boundary
 │  └─ kernel/                 # seeded randomness, crash-proof localStorage
@@ -140,6 +142,14 @@ src/
   window. "Copy link to this desktop" puts the whole layout in `?windows=`
   (percentages, so it fits any screen); the same format in `sessionStorage`
   survives a reload.
+- **Autopilot**: a few seconds after boot (if nobody touches anything) a fake
+  cursor tours the apps. It sends real pointer, mouse and input events, so it
+  runs the actual demo code; those events are untrusted, which is how any
+  real input hands control straight back. After 25 quiet seconds it offers
+  to resume. Tours are async scripts over `data-tour` targets in
+  `os/autopilot/scripts/` (`?autopilot=debug` shows the current step).
+  **Adding an app's tour**: give its controls `data-tour` ids and add a
+  `Tour` to the playlist.
 - **Apps get `isFocused` / `isVisible`** (not minimised, under 80% covered, tab
   shown) so they can pause work nobody can see. Apps with demo data set
   `resettable` and register a handler in `os/kernel/reset.ts` for the ↺ button.

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { animate, motion, useDragControls, useMotionValue, useReducedMotion, type PanInfo } from "motion/react"
 import { Copy, ExternalLink, Minus, RotateCcw, Square, X } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { capturePointer, cn } from "@/lib/utils"
 import { AppHost } from "@/os/app-host"
 import { AppIcon } from "@/os/app-icon"
 import { closeWindow, desktopPoint } from "@/os/hooks"
@@ -148,7 +148,7 @@ export function OsWindow({
     window.addEventListener("pointerup", () => (live.current = false), { once: true })
     if (win.maximized || win.snapped) {
       // Keep receiving moves even once the pointer leaves the title bar.
-      e.currentTarget.setPointerCapture(e.pointerId)
+      capturePointer(e.currentTarget, e.pointerId)
       pendingDetach.current = { x: e.clientX, y: e.clientY }
       return
     }
@@ -198,7 +198,7 @@ export function OsWindow({
   const onEdgeDown = (edge: Edge) => (e: React.PointerEvent) => {
     e.stopPropagation()
     if (e.button !== 0) return
-    e.currentTarget.setPointerCapture(e.pointerId)
+    capturePointer(e.currentTarget, e.pointerId)
     live.current = true
     const start = { x: x.get(), y: y.get(), width: width.get(), height: height.get() }
     resizing.current = { edge, px: e.clientX, py: e.clientY, start, frame: 0, rect: start }
@@ -332,7 +332,7 @@ export function OsWindow({
           </ChromeButton>
         </header>
 
-        <div className="@container relative min-h-0 flex-1 overflow-auto">
+        <div data-window-body className="@container relative min-h-0 flex-1 overflow-auto">
           <AppHost key={generation} app={app} isPhone={false} isFocused={focused} isVisible={visible} />
         </div>
 

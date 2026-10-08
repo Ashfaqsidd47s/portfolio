@@ -1,5 +1,6 @@
 import type { ComponentType } from "react"
 import {
+  AudioLines,
   BriefcaseBusiness,
   ChartNoAxesCombined,
   FileText,
@@ -53,6 +54,7 @@ const extras: Record<string, Pick<AppDef, "icon" | "tint" | "load">> = {
   "bingo-master": { icon: Grid3x3, tint: ["#f9a8d4", "#db2777"], load: projectInfo },
   "gaming-era": { icon: Gamepad2, tint: ["#a78bfa", "#4c1d95"], load: projectInfo },
   "file-scanner": { icon: ShieldCheck, tint: ["#86efac", "#15803d"], load: projectInfo },
+  studio: { icon: AudioLines, tint: ["#f0abfc", "#7e22ce"], load: () => import("@/apps/studio") },
   about: { icon: UserRound, tint: ["#fcd34d", "#d97706"], load: () => import("@/apps/about") },
   resume: { icon: FileText, tint: ["#cbd5e1", "#475569"] },
   journey: { icon: Joystick, tint: ["#ff4d8d", "#17153a"] },
