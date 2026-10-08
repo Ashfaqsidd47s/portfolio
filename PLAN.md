@@ -22,7 +22,8 @@ and can be merged on its own. Tick boxes as they land.
 | First app · TrypNow | ✅ done | Full app: supplier + agent sides, dashboard, package builder, AI listing, bookings, marketplace. |
 | 2 · Desktop shell | ✅ done | Wallpapers, icon grid (drag, rubber band, arrow keys), context menu, full menubar, boot, screensaver. Pieces that depend on later chunks are noted inline. |
 | 3 · Window manager | ✅ done | 8-edge resize, snapping, pull-off-maximised, open/close/minimise animations, shortcuts, Back closes newest, shareable + reload-proof layout, visibility flags. |
-| 4 – 11 | ⏳ next | Chunks 4 (autopilot), 5 (kernel) and 9 (phone OS) can now go in any order. Items below marked _partly done_ have a basic version in place. |
+| 4 · Autopilot | ✅ done | Desktop autopilot: a fake cursor driving real events, hand-over, resume offer, menubar controls, a six-stop tour. The phone's finger version is chunk 9. |
+| 5 – 11 | ⏳ next | Chunks 5 (kernel) and 9 (phone OS) are unblocked. Items below marked _partly done_ have a basic version in place. |
 
 ---
 
@@ -331,16 +332,17 @@ every TrypNow flow with no console errors.
       windows button with count, clock (local time + "Dehradun" time tooltip).
       _Done: logo menu (About this portfolio, Download résumé, Restart), the
       four menus with click-then-hover switching and ←/→/↓ keys, Windows
-      menu, theme, clock with Dehradun time. Still to come with their
-      chunks: the autopilot toggle (Phase 4), search (Phase 10) and a
+      menu, theme, clock with Dehradun time, and (Phase 4) the autopilot
+      pill. Still to come with their
+      chunks: search (Phase 10) and a
       Settings entry (Phase 8)._
 - [x] **Boot sequence** (first visit only, skippable, ~1.5s): logo → progress bar →
       desktop fades in. Reuse the terminal-boot idea from `app-window.tsx`.
       _Deep links (`/apps/:id`) skip it; Restart replays it._
 - [x] **Screensaver** after 90s idle *when autopilot is off* (otherwise autopilot is
       the screensaver).
-      _Idle only counts while the tab is visible. Phase 4 must also switch
-      it off while the autopilot is driving (see the note in `desktop.tsx`)._
+      _Idle only counts while the tab is visible, and never while the
+      autopilot is driving._
 
 **Done when:** the desktop renders with icons, menus, wallpaper switching and theme
 toggle; double-clicking an icon logs `open(appId)`. ✅ Build, lint and 23 unit
@@ -437,56 +439,88 @@ The signature feature. The OS demos itself until a human takes over.
 
 ### 4.1 Behaviour
 
-- [ ] Starts **3s after boot** if the visitor hasn't interacted, and only when the tab
+- [x] Starts **3s after boot** if the visitor hasn't interacted, and only when the tab
       is visible (`visibilitychange`). Never starts under `prefers-reduced-motion`
       (shows a "▶ Take the tour" button instead).
-- [ ] A small banner/pill in the menubar: **"Autopilot · touch anything to take
+      _Also not on a deep link (`/apps/:id`): that visitor came for one app.
+      The "▶ Take the tour" / "Resume tour" button is in the menubar whenever
+      the autopilot isn't driving._
+- [x] A small banner/pill in the menubar: **"Autopilot · touch anything to take
       over"** with ⏸ / ⏭ (next app) / ✕ (turn off) controls.
-- [ ] **Hand-over**: any real `pointermove` beyond a few px, `pointerdown`, `wheel`,
+- [x] **Hand-over**: any real `pointermove` beyond a few px, `pointerdown`, `wheel`,
       `keydown` or `touchstart` → autopilot pauses *immediately*, the fake cursor
       fades out where it is, nothing the tour opened is closed. Synthetic events from
       the engine are flagged so they don't trigger hand-over.
-- [ ] **Resume**: after 25s of no interaction, a toast "Resume the tour?" appears;
+      _The flag is the browser's own: engine events have `isTrusted === false`.
+      A drag cut short still gets its `pointerup`, so nothing is left stuck.
+      Hiding the tab pauses it too._
+- [x] **Resume**: after 25s of no interaction, a toast "Resume the tour?" appears;
       it resumes on click, or on its own after another 10s. Off if the visitor turned
       autopilot off (persisted).
-- [ ] **Loop**: walk the tour playlist (projects first, then side projects, then
+      _It resumes with the next app, leaving the interrupted one as the
+      visitor had it. "No thanks" stops the offers for this visit._
+- [x] **Loop**: walk the tour playlist (projects first, then side projects, then
       About / Contact), then start over with windows closed.
+      _While it drives, opening apps replaces the history entry instead of
+      pushing, so the tour never fills the visitor's Back button._
 
-### 4.2 Engine
+### 4.2 Engine (`src/os/autopilot/`)
 
-- [ ] `cursor.tsx` — an SVG pointer in a fixed layer above everything
+- [x] `cursor.tsx` — an SVG pointer in a fixed layer above everything
       (`pointer-events: none`), moved with a Motion spring along a slightly curved
       path (quadratic Bézier with random control point, duration from distance —
       Fitts-like), with a click ripple and a press "squish".
-- [ ] Targets are found by `data-tour="…"` attributes, never by CSS classes, so
+- [x] Targets are found by `data-tour="…"` attributes, never by CSS classes, so
       restyling never breaks tours. The engine waits (with timeout) for the target
       to exist and be visible, scrolls it into view inside its window first.
-- [ ] Actions: `moveTo(target)`, `click`, `dblclick`, `type(text, {wpm})` (sets the
+- [x] Actions: `moveTo(target)`, `click`, `dblclick`, `type(text, {wpm})` (sets the
       value through the native setter + dispatches `input` so React state updates),
       `press(key)`, `drag(from, to)` (pointer events), `scroll(target, by)`,
       `wait(ms)`, `say(text)` (caption bubble next to the cursor, e.g. "Drag a hotel
       into the package"), `openApp(id)`, `closeWindow(id)`, `arrange(layout)`.
-- [ ] Clicks dispatch real events (`element.click()` / pointer sequence) so the tour
+      _`arrange` became `dragWindow(id, point)`: the tour drags title bars onto
+      the screen edges, so snapping is shown through the real window code._
+- [x] Clicks dispatch real events (`element.click()` / pointer sequence) so the tour
       exercises the actual demo code — no fake "video" playback.
-- [ ] Each script is an async function using those actions; the engine runs it with
+      _Full pointer → mouse → click sequences at the target's centre, sent to
+      whatever is really under that point. `capturePointer` in `lib/utils`
+      keeps pointer capture from throwing on these synthetic pointers._
+- [x] Each script is an async function using those actions; the engine runs it with
       an `AbortSignal` so hand-over cancels mid-step cleanly.
-- [ ] Captions are also written to an `aria-live="polite"` region.
-- [ ] Analytics-free; a tiny debug overlay (`?autopilot=debug`) shows the current step.
+      _`run.ts` (the playlist loop, abort, Bézier, Fitts) has no DOM and is
+      unit-tested. A tour that fails is skipped and its windows closed._
+- [x] Captions are also written to an `aria-live="polite"` region.
+- [x] Analytics-free; a tiny debug overlay (`?autopilot=debug`) shows the current step.
 
 ### 4.3 Default tour (desktop)
 
-1. Move to **TrypNow** → double-click → drag two hotels and an attraction into a
-   package → type a prompt into the AI listing form → close.
-2. **SureGem** → filter by shape + carat → open a stone → add to cart → close.
-3. **11Jobs** → type "Hire a senior React dev with a 45-min test" into the MCP chat
-   → watch the workflow build → minimise.
-4. **11Matrix** → watch KPIs tick → re-rank the leaderboard → snap left; open
-   **File Scanner** → upload a sample → snap right (shows snapping).
-5. **Bingo Master** → play three moves against the bot.
-6. Open **About me** and **Contact** → end on the contact form, then close all.
+_As shipped (`autopilot/scripts/index.ts`). Apps without a working demo yet
+open their case study and scroll it; each gets its full tour when its demo
+lands in chunks 6–7, and Contact joins the end in chunk 8._
+
+1. [x] **TrypNow** → double-click → drag a hotel and two attractions into the
+   package (the price updates) → type a prompt into the AI listing form →
+   generate → close. Nothing is published or saved, so the visitor's demo
+   data is untouched.
+2. [ ] **SureGem** → filter by shape + carat → open a stone → add to cart → close.
+   _For now: the case study._
+3. [ ] **11Jobs** → type "Hire a senior React dev with a 45-min test" into the MCP chat
+   → watch the workflow build → minimise. _For now: the case study._
+4. [x] **11Matrix** → snap left; open **File Scanner** → snap right (shows
+   snapping). _KPIs, leaderboard and upload come with their demos._
+5. [ ] **Bingo Master** → play three moves against the bot. _For now: the case study._
+6. [x] Open **About me** → read → close, then close all and loop.
 
 **Done when:** a fresh visit with no input plays the whole tour, and any input
 stops it instantly without breaking the open app.
+✅ Build, lint and 35 unit tests pass (6 new for the runner). In Playwright a
+fresh visit with no input played all six tours and looped with no errors
+and Back history unchanged. A real mouse move, key press or wheel mid-drag
+handed over at once, with the cursor gone, windows kept and no stuck drag.
+It offered to resume after 25s and resumed at the next app after 10s more.
+Next / off / "Take the tour" work, off survives reload, and it never
+auto-starts on deep links, under reduced motion or after an early touch.
+The Phase 3 window suite still passes.
 
 ---
 
@@ -526,7 +560,7 @@ The four demos already exist in `src/components/journey/app-*.tsx`. Move each in
         marketplace (search, country filter, booking form). The loop works end to
         end: publish as supplier → book as agent → confirm as supplier.
   - [x] The journey's TrypNow stage now reuses the same builder and AI listing.
-  - [ ] Tour script for the autopilot (Phase 4). The `data-tour` targets are in place.
+  - [x] Tour script for the autopilot (Phase 4).
 - [ ] **SureGem** (`app-suregem.tsx`, 552 lines)
   - [ ] Search + filters (shape, carat, colour, clarity, price), grid/list toggle.
   - [ ] Stone detail drawer (existing), cart, inquiry form, supplier upload (existing).

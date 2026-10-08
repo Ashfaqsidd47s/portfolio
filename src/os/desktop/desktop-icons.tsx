@@ -1,5 +1,5 @@
 import * as React from "react"
-import { cn } from "@/lib/utils"
+import { capturePointer, cn } from "@/lib/utils"
 import { preloadApp } from "@/os/app-host"
 import { AppIcon } from "@/os/app-icon"
 import { useLaunch } from "@/os/hooks"
@@ -101,7 +101,7 @@ export function DesktopIcons({ children }: { children?: React.ReactNode }) {
     if (e.button !== 0) return
     const ids = selected.has(id) ? [...selected] : [id]
     drag.current = { id, ids, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false }
-    e.currentTarget.setPointerCapture(e.pointerId)
+    capturePointer(e.currentTarget, e.pointerId)
   }
 
   const onIconPointerMove = (e: React.PointerEvent) => {
@@ -197,7 +197,7 @@ export function DesktopIcons({ children }: { children?: React.ReactNode }) {
     const additive = e.shiftKey || e.metaKey || e.ctrlKey ? selected : new Set<string>()
     band.current = { x: e.clientX - origin.left, y: e.clientY - origin.top, pointerId: e.pointerId, additive, last: "" }
     if (!e.shiftKey && !e.metaKey && !e.ctrlKey) setSelected(new Set())
-    e.currentTarget.setPointerCapture(e.pointerId)
+    capturePointer(e.currentTarget, e.pointerId)
   }
 
   const onBackgroundPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {

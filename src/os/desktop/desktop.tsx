@@ -8,6 +8,10 @@ import { getApp, type AppDef } from "@/os/registry/apps"
 import { useSettings } from "@/os/store/settings"
 import { parseLayout, selectFocusedId, serializeLayout, useWindows, visibleWindowIds, windowsStore } from "@/os/store/windows"
 import { Wallpaper, useWallpaper } from "@/os/wallpaper"
+import { AutopilotCursor } from "@/os/autopilot/cursor"
+import { ResumeOffer } from "@/os/autopilot/controls"
+import { useAutopilot } from "@/os/autopilot/store"
+import { useAutopilotDriver } from "@/os/autopilot/use-autopilot"
 import { BootScreen, useBoot } from "./boot"
 import { useDesktopContextMenu } from "./context-menu"
 import { DesktopIcons } from "./desktop-icons"
@@ -226,9 +230,12 @@ export function DesktopOS({ routeApp }: { routeApp?: AppDef }) {
 
   const wallpaper = useWallpaper()
   const booting = useBoot((s) => s.booting)
-  // Phase 4: while the autopilot is driving it *is* the screensaver, so this
-  // will also wait for the autopilot to be off or handed over.
-  const idle = useIdle(SCREENSAVER_AFTER, !booting)
+  // While the autopilot is driving it *is* the screensaver.
+  const autopilot = useAutopilot((s) => s.status)
+  const idle = useIdle(SCREENSAVER_AFTER, !booting && autopilot !== "running")
+  // A deep link means the visitor came for one app: don't start the tour over it.
+  const [deepLink] = React.useState(() => Boolean(routeApp))
+  useAutopilotDriver({ ready: !booting, deepLink })
   const cycleWallpaper = useSettings((s) => s.cycleWallpaper)
   const { onContextMenu, menu } = useDesktopContextMenu()
 
@@ -243,6 +250,8 @@ export function DesktopOS({ routeApp }: { routeApp?: AppDef }) {
         <WindowList />
         {menu}
       </div>
+      <AutopilotCursor />
+      <ResumeOffer />
       <AnimatePresence>
         {booting && <BootScreen key="boot" />}
         {idle && !booting && <Screensaver key="screensaver" />}

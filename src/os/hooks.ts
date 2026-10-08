@@ -1,5 +1,6 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
+import { autopilotStore } from "@/os/autopilot/store"
 import type { AppDef } from "@/os/registry/apps"
 import { selectFocusedId, serializeLayout, windowsStore, type Point } from "@/os/store/windows"
 
@@ -95,7 +96,9 @@ export function useLaunch() {
         ...(options.fromHome && { fromHome: true }),
         ...(isOpen ? here?.opened && { opened: here.opened } : { opened: app.id }),
       }
-      navigate(`/apps/${app.id}`, { state, replace: isOpen })
+      // The autopilot opens apps over and over; it mustn't fill the visitor's Back history.
+      const touring = autopilotStore.getState().status === "running"
+      navigate(`/apps/${app.id}`, { state, replace: isOpen || touring })
     },
     [navigate]
   )

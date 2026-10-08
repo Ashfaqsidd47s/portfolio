@@ -9,6 +9,7 @@ import { AppIcon } from "@/os/app-icon"
 import { desktopLink, useClock, useLaunch } from "@/os/hooks"
 import { apps, getApp, type AppDef } from "@/os/registry/apps"
 import { selectFocusedId, useWindows, windowsStore } from "@/os/store/windows"
+import { AutopilotControls } from "@/os/autopilot/controls"
 import { useBoot } from "./boot"
 import { MenuPanel, useDismiss, type MenuEntry } from "./menu"
 import { SHORTCUTS } from "./shortcuts"
@@ -238,6 +239,7 @@ export function MenuBar() {
         </span>
       )}
       <div className="ml-auto flex items-center gap-1">
+        <AutopilotControls />
         <WindowsMenu />
         <button
           type="button"
