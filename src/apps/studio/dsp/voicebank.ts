@@ -23,6 +23,8 @@ export type Unit = {
 export type Voicebank = {
   version: 1
   source: string
+  /** Whether cuts came from per-word caption timestamps (accurate) or line timings (rough). */
+  timing?: "words" | "lines"
   words: Unit[]
   syllables: Unit[]
   /** Typical pitch of the voice, Hz. */
@@ -85,7 +87,66 @@ export function buildVoicebank(a: Analysis, regions: Region[], cues: Cue[], sour
   const pitches: number[] = []
 
   const spoken = cues.filter((c) => !c.sound)
-  spoken.forEach((cue, ci) => {
+
+  // Word-timed captions: cut each word from its own timestamps, snapped to the
+  // nearest real dip in loudness. Far more reliable than guessing inside lines.
+  if (spoken.some((c) => c.words?.length)) {
+    const env = smooth(a.db, 0, a.frames)
+    const threshold = a.floor + 12
+    const t = (f: number) => f / FPS
+    /** The quietest frame in [lo, hi]. */
+    const quietest = (lo: number, hi: number) => {
+      let best = Math.max(0, lo)
+      for (let f = Math.max(0, lo); f <= Math.min(a.frames - 1, hi); f++) if (env[f] < env[best]) best = f
+      return best
+    }
+    for (const cue of spoken) {
+      for (const w of cue.words ?? []) {
+        if (!isDevanagari(w.text)) continue
+        const text = words(w.text)[0]
+        if (!text) continue
+        const s0 = Math.round(w.start * FPS)
+        const e0 = Math.round(w.end * FPS)
+        // Start: the quietest point just around the stamped onset.
+        let start = quietest(s0 - 8, s0 + 3)
+        // End: if the voice stops before the next word (a pause), end there;
+        // otherwise at the quietest point just around the next word's onset.
+        let end = quietest(e0 - 8, e0 + 3)
+        let speech = start
+        while (speech < end && env[speech] < threshold) speech++
+        for (let f = speech; f < end; f++) {
+          if (env[f] < threshold) {
+            let run = f
+            while (run < end && env[run] < threshold) run++
+            if (run - f >= 12) {
+              end = Math.min(end, f + 8)
+              break
+            }
+            f = run
+          }
+        }
+        start = Math.max(start, speech - 8)
+        if (end - start < 6) continue
+        const parts = syllables(text)
+        const believableLength = Math.exp(-Math.abs(Math.log((end - start) / FPS / (0.2 * Math.max(1, parts.length)))))
+        const score = Math.max(0, Math.min(1, 0.45 + 0.35 * cleanShare(t(start), t(end)) + 0.2 * believableLength))
+        wordUnits.push({ id: id++, text, start: t(start), end: t(end), score })
+        // Syllables: lay them onto the loudness peaks inside the word.
+        const nuclei = findNuclei(env.subarray(start, end), threshold)
+        const n = parts.length
+        const peak = (k: number) => start + nuclei[Math.min(nuclei.length - 1, Math.floor(((k + 0.5) * nuclei.length) / n))]
+        const cut = (k: number) => (k <= 0 ? start : k >= n ? end : nuclei.length >= n ? dip(env, peak(k - 1), peak(k)) : Math.round(start + ((end - start) * k) / n))
+        parts.forEach((p, k) => {
+          const s1 = cut(k)
+          const e1 = cut(k + 1)
+          if (e1 - s1 >= 5) syllableUnits.push({ id: id++, text: p, start: t(s1), end: t(e1), score: score * 0.9 })
+        })
+        for (let f = start; f < end; f++) if (a.f0[f] > 0 && a.conf[f] > 0.7) pitches.push(a.f0[f])
+      }
+    }
+  }
+
+  ;(spoken.some((c) => c.words?.length) ? [] : spoken).forEach((cue, ci) => {
     const tokens = words(cue.text).filter(isDevanagari)
     if (tokens.length === 0) return
     const sylls = tokens.map((t) => syllables(t))
@@ -155,5 +216,12 @@ export function buildVoicebank(a: Analysis, regions: Region[], cues: Cue[], sour
   for (const u of syllableUnits) u.score *= 0.5 + 0.5 * believable(u, 1)
 
   pitches.sort((p, q) => p - q)
-  return { version: 1, source, words: wordUnits, syllables: syllableUnits, pitch: pitches[pitches.length >> 1] ?? 200 }
+  return {
+    version: 1,
+    source,
+    timing: spoken.some((c) => c.words?.length) ? "words" : "lines",
+    words: wordUnits,
+    syllables: syllableUnits,
+    pitch: pitches[pitches.length >> 1] ?? 200,
+  }
 }

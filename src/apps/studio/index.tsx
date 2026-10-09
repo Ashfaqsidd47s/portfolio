@@ -22,11 +22,11 @@ function DropZone({ onFiles, busy }: { onFiles: (files: FileList) => void; busy:
         <AudioLines className="size-10 text-accent" aria-hidden />
         <p className="text-base font-semibold">{busy ?? "Drop a recording and its captions"}</p>
         <p className="text-sm text-muted-foreground">
-          Audio or video (mp3, m4a, wav, mp4) plus an optional <code>.srt</code> / <code>.vtt</code>. YouTube auto-captions work as they
-          are.
+          Audio or video (mp3, m4a, wav, mp4) plus its captions: <code>.srt</code>, <code>.vtt</code> or <code>.json3</code>. YouTube
+          auto-captions work as they are.
         </p>
         <span className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">Choose files</span>
-        <input type="file" multiple accept="audio/*,video/*,.srt,.vtt" className="sr-only" onChange={(e) => e.target.files && onFiles(e.target.files)} />
+        <input type="file" multiple accept="audio/*,video/*,.srt,.vtt,.json3,.json" className="sr-only" onChange={(e) => e.target.files && onFiles(e.target.files)} />
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Lock className="size-3" aria-hidden /> Everything stays in this browser. Nothing is uploaded.
         </p>
@@ -73,8 +73,9 @@ export default function Studio({ isVisible }: AppProps) {
   const loadFiles = async (files: FileList | File[]) => {
     setError(null)
     const list = [...files]
-    const captionFile = list.find((f) => /\.(srt|vtt)$/i.test(f.name))
-    const audioFile = list.find((f) => !/\.(srt|vtt)$/i.test(f.name))
+    const isCaptions = (f: File) => /\.(srt|vtt|json3|json)$/i.test(f.name)
+    const captionFile = list.find(isCaptions)
+    const audioFile = list.find((f) => !isCaptions(f))
     if (captionFile) setCues({ name: captionFile.name, cues: parseCaptions(await captionFile.text()) })
     if (!audioFile) return
     try {
@@ -113,7 +114,7 @@ export default function Studio({ isVisible }: AppProps) {
       ? "Load its captions too: they say which words are where."
       : !analysis
         ? "Analysing…"
-        : `${audio.name} · ${cues.cues.length} captions`
+        : `${audio.name} · ${cues.cues.length} captions${cues.cues.some((c) => c.words?.length) ? " with word timing" : ""}`
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "analyse", label: "Analyse" },
@@ -162,8 +163,10 @@ export default function Studio({ isVisible }: AppProps) {
           </label>
           <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2 py-1 hover:bg-muted">
             <FileText className="size-3.5" aria-hidden />
-            <span className="max-w-40 truncate">{cues ? `${cues.cues.length} captions` : "Load captions"}</span>
-            <input type="file" accept=".srt,.vtt" className="sr-only" onChange={(e) => e.target.files && void loadFiles(e.target.files)} />
+            <span className="max-w-40 truncate">
+              {cues ? `${cues.cues.length} captions${cues.cues.some((c) => c.words?.length) ? " · word-timed" : ""}` : "Load captions"}
+            </span>
+            <input type="file" accept=".srt,.vtt,.json3,.json" className="sr-only" onChange={(e) => e.target.files && void loadFiles(e.target.files)} />
           </label>
         </div>
       </header>
@@ -180,6 +183,7 @@ export default function Studio({ isVisible }: AppProps) {
         <VoicebankView
           state={voice}
           canBuild={!!(audio && analysis && cues)}
+          wordTimed={!!cues?.cues.some((c) => c.words?.length)}
           buildHint={buildHint}
           onBuild={build}
           onChange={onChange}

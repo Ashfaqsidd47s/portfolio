@@ -18,9 +18,29 @@ const clipOf = (voice: Voice, u: Unit) => voice.mono.slice(Math.floor(u.start * 
  * nudge or remove cuts that came out wrong (the cutting is automatic and
  * approximate). Every change is saved in this browser.
  */
+/** How to fetch YouTube's word-timed auto-captions (the .srt download from YouTube Studio drops word timing). */
+function WordTimingTip() {
+  return (
+    <div className="rounded-lg border border-[#fbbf24]/60 bg-[#fbbf24]/10 p-3 text-left text-xs leading-relaxed">
+      <p className="font-semibold text-foreground">These captions only time whole lines, so word cuts are rough.</p>
+      <p className="mt-1 text-muted-foreground">
+        YouTube's auto-captions time every word, but the <code>.srt</code> download drops that. Get the word-timed version with{" "}
+        <a className="underline" href="https://github.com/yt-dlp/yt-dlp" target="_blank" rel="noreferrer">
+          yt-dlp
+        </a>{" "}
+        and load it here instead, then rebuild:
+      </p>
+      <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 font-mono text-[0.6875rem] text-foreground">
+        yt-dlp --skip-download --write-auto-subs --sub-langs hi --sub-format json3 "VIDEO_URL"
+      </pre>
+    </div>
+  )
+}
+
 export function VoicebankView({
   state,
   canBuild,
+  wordTimed,
   buildHint,
   onBuild,
   onChange,
@@ -28,6 +48,7 @@ export function VoicebankView({
 }: {
   state: VoiceState | null
   canBuild: boolean
+  wordTimed: boolean
   buildHint: string
   onBuild: () => void
   onChange: (vb: Voicebank) => void
@@ -63,6 +84,11 @@ export function VoicebankView({
             Build voicebank
           </button>
           <p className="mt-2 text-xs text-muted-foreground">{buildHint}</p>
+          {canBuild && !wordTimed && (
+            <div className="mt-4">
+              <WordTimingTip />
+            </div>
+          )}
         </div>
       </div>
     )
@@ -96,11 +122,22 @@ export function VoicebankView({
           <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
             <Lock className="size-3 shrink-0" aria-hidden /> <span className="truncate">Saved in this browser</span>
           </p>
+          {canBuild && (
+            <button type="button" onClick={onBuild} data-tour="studio-rebuild-voicebank" className="rounded-md border border-border px-2 py-0.5 text-xs hover:bg-muted" title="Rebuild from the loaded recording and captions">
+              Rebuild
+            </button>
+          )}
           <button type="button" onClick={onDelete} aria-label="Delete voicebank" title="Delete voicebank" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
             <Trash2 className="size-3.5" />
           </button>
         </div>
       </div>
+
+      {vb.timing !== "words" && (
+        <div className="mt-3">
+          <WordTimingTip />
+        </div>
+      )}
 
       <div className="mt-4 grid gap-4 @3xl:grid-cols-[minmax(0,1fr)_20rem]">
         <section>
