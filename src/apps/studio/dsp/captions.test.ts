@@ -44,4 +44,47 @@ describe("parseCaptions", () => {
     const vtt = "WEBVTT\n\n00:01.000 --> 00:02.500\n<c>hello</c> there\n"
     expect(parseCaptions(vtt)).toEqual([{ start: 1, end: 2.5, text: "hello there", sound: false }])
   })
+
+  it("keeps per-word timing from YouTube's auto-caption WebVTT", () => {
+    const vtt = `WEBVTT
+Kind: captions
+Language: hi
+
+00:00:01.439 --> 00:00:03.590 align:start position:0%
+ 
+हे<00:00:01.760><c> गाइस</c><00:00:02.080><c> वेलकम</c>
+
+00:00:03.590 --> 00:00:03.600 align:start position:0%
+हे गाइस वेलकम
+ 
+
+00:00:03.600 --> 00:00:05.800 align:start position:0%
+हे गाइस वेलकम
+और<00:00:04.100><c> बैक</c>
+`
+    const cues = parseCaptions(vtt)
+    expect(cues.map((c) => c.text)).toEqual(["हे गाइस वेलकम", "और बैक"])
+    expect(cues[0].words).toEqual([
+      { text: "हे", start: 1.439, end: 1.76 },
+      { text: "गाइस", start: 1.76, end: 2.08 },
+      { text: "वेलकम", start: 2.08, end: 3.28 },
+    ])
+    expect(cues[1].words![1]).toEqual({ text: "बैक", start: 4.1, end: 4.1 + 1.2 })
+  })
+
+  it("reads YouTube json3 with word offsets", () => {
+    const json = JSON.stringify({
+      events: [
+        { tStartMs: 1000, dDurationMs: 2000, segs: [{ utf8: "काफी" }, { utf8: " अच्छा", tOffsetMs: 400 }] },
+        { tStartMs: 3000, segs: [{ utf8: "\n" }] },
+        { tStartMs: 3100, dDurationMs: 900, segs: [{ utf8: "है" }] },
+      ],
+    })
+    const cues = parseCaptions(json)
+    expect(cues.flatMap((c) => c.words!.map((w) => [w.text, w.start, w.end]))).toEqual([
+      ["काफी", 1, 1.4],
+      ["अच्छा", 1.4, 2.6],
+      ["है", 3.1, 4.3],
+    ])
+  })
 })

@@ -84,4 +84,30 @@ describe("voicebank", () => {
     expect(smooth.audio.length / SR).toBeGreaterThan(expected)
     expect(Math.max(...smooth.audio.map(Math.abs))).toBeGreaterThan(0.05)
   })
+
+  it("cuts straight from word-timed captions, snapping to the real gaps", () => {
+    // Timestamps off by up to 50 ms, as YouTube's are.
+    const timed: Cue[] = [
+      {
+        start: 0.3,
+        end: duration - 0.3,
+        text: "काफी है मेकअप",
+        sound: false,
+        words: [
+          { text: "काफी", start: truth[0].start + 0.04, end: truth[1].start - 0.03 },
+          { text: "है", start: truth[1].start - 0.03, end: truth[2].start + 0.05 },
+          { text: "मेकअप", start: truth[2].start + 0.05, end: truth[2].end + 0.3 },
+        ],
+      },
+    ]
+    const tvb = buildVoicebank(a, classifyRegions(a, timed), timed)
+    expect(tvb.words.map((w) => w.text)).toEqual(["काफी", "है", "मेकअप"])
+    // Each cut holds the whole word, with at most ~0.1 s of quiet around it.
+    tvb.words.forEach((w, i) => {
+      expect(w.start).toBeLessThanOrEqual(truth[i].start + 0.02)
+      expect(w.start).toBeGreaterThan(truth[i].start - 0.1)
+      expect(w.end).toBeGreaterThanOrEqual(truth[i].end - 0.02)
+      expect(w.end).toBeLessThan(truth[i].end + 0.12)
+    })
+  })
 })
