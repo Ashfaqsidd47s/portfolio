@@ -46,6 +46,14 @@ export const appsMeta: AppMeta[] = [
     window: PROJECT_WINDOW,
   },
   {
+    id: "berkeley-diamonds",
+    name: "Berkeley Diamonds",
+    description: "Loading intro for a jewelry brand, then a garden where every letter you type grows a faceted diamond.",
+    kind: "project",
+    column: "left",
+    window: { width: 980, height: 680, minWidth: 380, minHeight: 440 },
+  },
+  {
     id: "suregem",
     name: "SureGem",
     description: "Multi-vendor diamond and fine-jewelry marketplace.",
