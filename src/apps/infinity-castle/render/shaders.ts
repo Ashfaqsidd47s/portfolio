@@ -505,8 +505,9 @@ void main() {
 `
 
 /**
- * The last pass: the biwa's shockwave ripple, colour fringing, grading
- * (teal shadows, amber highlights), vignette, grain and fades.
+ * The last pass: the biwa's shockwave ripple, colour fringing, a zoom blur
+ * and speed lines while falling, grading (teal shadows, amber highlights),
+ * vignette, grain and fades.
  */
 export const finalVertex = /* glsl */ `
 varying vec2 vUv;
@@ -538,18 +539,40 @@ void main() {
   float wave = uPulseT * 1.6;
   float ring = exp(-pow((r - wave) * 9.0, 2.0)) * uPulse * uMotion;
   uv -= dir * ring * 0.025;
-  float ca = (0.0005 + uPulse * 0.007 * uMotion + uFall * 0.004) * r;
+  float fall = uFall * uMotion;
+  float ca = (0.0005 + uPulse * 0.007 * uMotion + fall * 0.006) * r;
   vec3 col;
   col.r = texture2D(tDiffuse, uv - dir * ca).r;
   col.g = texture2D(tDiffuse, uv).g;
   col.b = texture2D(tDiffuse, uv + dir * ca).b;
+  // Falling: everything streams out from the point you're falling towards.
+  if (fall > 0.01) {
+    vec3 acc = col;
+    float wsum = 1.0;
+    float jitter = hash(uv * uResolution + uTime);
+    for (int i = 1; i <= 7; i++) {
+      float k = (float(i) + jitter) / 7.0;
+      float w = 1.0 - k * 0.6;
+      acc += texture2D(tDiffuse, uv - c * k * 0.06 * fall).rgb * w;
+      wsum += w;
+    }
+    col = mix(col, acc / wsum, smoothstep(0.04, 0.32, r));
+    // Speed lines: thin radial streaks, dashed and racing outward.
+    float ang = atan(c.y, c.x * uResolution.x / uResolution.y);
+    float lane = floor(ang * 38.0);
+    float seed = hash(vec2(lane, floor(uTime * 9.0)));
+    float thin = 1.0 - smoothstep(0.0, 0.16 + seed * 0.12, abs(fract(ang * 38.0) - 0.5));
+    float dash = step(0.45, fract(r * (1.5 + seed * 2.0) - uTime * (3.0 + seed * 4.0) + seed * 7.0));
+    float lines = thin * dash * step(0.72, seed) * smoothstep(0.3, 0.75, r);
+    col += vec3(1.0, 0.86, 0.66) * lines * fall * 0.18;
+  }
   // Grade: teal in the shadows, amber in the light.
   float l = dot(col, vec3(0.299, 0.587, 0.114));
   col = mix(col * vec3(0.82, 1.0, 1.12), col * vec3(1.08, 0.97, 0.86), smoothstep(0.02, 0.4, l));
   // The strum: a beat of washed-out, ink-and-paper light.
   col = mix(col, vec3(l) * vec3(1.25, 1.05, 0.85), uPulse * 0.4 * exp(-uPulseT * 4.0));
   col += vec3(1.0, 0.6, 0.3) * ring * 0.15;
-  float vig = smoothstep(1.05, 0.25, r * (1.0 + uFall * 0.35));
+  float vig = smoothstep(1.05, 0.25, r * (1.0 + uFall * 0.5));
   col *= mix(0.35, 1.0, vig);
   col += (hash(uv * uResolution + fract(uTime) * 100.0) - 0.5) * 0.012 * (0.3 + l * 2.0);
   col = mix(col, vec3(0.0), uBlack);

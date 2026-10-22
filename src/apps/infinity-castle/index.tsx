@@ -72,6 +72,7 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
   const [titlecard, setTitlecard] = React.useState(false)
   const [beben, setBeben] = React.useState(0)
   const [stats, setStats] = React.useState<Stats | null>(null)
+  const [dropping, setDropping] = React.useState(false)
   const [stick, setStick] = React.useState<{ x: number; y: number; dx: number; dy: number } | null>(null)
 
   const playing = phase === "intro" || phase === "play"
@@ -99,6 +100,9 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
       case "titlecard":
         setTitlecard(true)
         window.setTimeout(() => setTitlecard(false), 3400)
+        break
+      case "drop":
+        setDropping(e.active)
         break
       case "ended":
         setStats(e.stats)
@@ -246,6 +250,7 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
     setStats(null)
     setFound([])
     setToasts([])
+    setDropping(false)
     game.start()
     pause(false)
     lock()
@@ -274,7 +279,7 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
         ref={canvasRef}
         className="absolute inset-0 size-full"
         role="img"
-        aria-label="The Infinity Castle: rooms of tatami and sliding doors hanging in a bottomless void, lit by paper lanterns, rearranging themselves."
+        aria-label="The Infinity Castle: rooms of tatami and sliding doors hanging every which way in a bottomless void, lit by paper lanterns, rearranging themselves."
         onClick={() => playing && !paused && lock()}
       />
 
@@ -287,8 +292,8 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
         </div>
       )}
 
-      {/* ── HUD ─────────────────────────────────────────────────────── */}
-      {playing && (
+      {/* ── HUD (out of the way while you fall in) ───────────────────── */}
+      {playing && !dropping && (
         <>
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3 @md:p-4">
             <ul className="space-y-1" aria-label="Upper Moons found">
@@ -418,20 +423,20 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
 
       {/* ── Title ───────────────────────────────────────────────────── */}
       {phase === "title" && !error && (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-gradient-to-b from-black/30 via-black/10 to-black/70 p-6 text-center">
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_center,transparent_20%,#00000088_75%)] p-6 text-center">
           <p className={`${KANJI} text-5xl font-bold tracking-[0.25em] text-[#fff1d6] [text-shadow:0_0_36px_#ff5a1a] @md:text-7xl`}>無限城</p>
           <h2 className={`${SERIF} mt-2 text-sm tracking-[0.55em] text-[#f3e3c6]/85 @md:text-base`}>INFINITY CASTLE</h2>
-          <p className="mt-5 max-w-md text-sm leading-relaxed text-[#f3e3c6]/75">
-            Rooms of tatami and sliding doors hang in a bottomless dark. Every few dozen steps Nakime strums her
-            biwa, and the castle rearranges itself: rooms slide, stairs fold away, floors open, gravity turns.
-            Follow the scent to the three Upper Moons&rsquo; rooms, then climb to her.
+          <p className="mt-5 max-w-md text-sm leading-relaxed text-[#f3e3c6]/80 [text-shadow:0_1px_8px_#000]">
+            A biwa sounds and the floor is gone. You fall into a castle of tatami rooms hanging every which way in
+            a bottomless dark, some turned over so their floors are walls. Every few dozen steps Nakime strums and
+            it rearranges itself. Follow the scent to the three Upper Moons&rsquo; rooms, then climb to her.
           </p>
           <button
             type="button"
             onClick={enter}
             className={`${SERIF} mt-6 rounded-full border border-[#e0a25a]/60 bg-[#5a1408]/50 px-7 py-2.5 text-lg tracking-[0.2em] text-[#fff1d6] shadow-[0_0_30px_#ff5a1a55] transition hover:bg-[#7a1c0a]/70 focus-visible:outline-2 focus-visible:outline-[#e0a25a]`}
           >
-            Enter the castle
+            Fall into the castle
           </button>
           <p className="mt-4 text-[0.6875rem] text-[#f3e3c6]/45">
             {touch

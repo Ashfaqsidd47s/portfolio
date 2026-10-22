@@ -1,8 +1,10 @@
 import {
+  CELL,
   Castle,
   DIRS,
   LEVEL,
   ROOM_R,
+  SPAN,
   STAIR_LANE,
   nodeCenter,
   opposite,
@@ -11,11 +13,14 @@ import {
   type Room,
   type RoomKind,
   type ShiftPlan,
+  type Spur,
+  type Stray,
   type Vec3,
 } from "./castle"
+import { TURNED, apply, orientBox, sideVector, unapply, type Mat3 } from "./orient"
 import type { Box } from "./physics"
 import { turn } from "./render/builder"
-import { PART_COUNT, TRAP_PART, WALL, doorPart, gatePart, type Template } from "./render/kit"
+import { DOOR_H, DOOR_W, PART_COUNT, TRAP_PART, WALL, WALL_H, doorPart, gatePart, type Template } from "./render/kit"
 
 /**
  * The castle in motion. Each room and passage is a block with a live
@@ -23,6 +28,9 @@ import { PART_COUNT, TRAP_PART, WALL, doorPart, gatePart, type Template } from "
  * passages) how far it has unfolded. A strum is a timeline of tweens on
  * those numbers; the renderer draws them and the physics collides with
  * them, so what you see is what you stand on.
+ *
+ * Strays (rooms turned over) are blocks with an orientation; a spur is a
+ * bridge stretched from a hall to a stray's door.
  */
 
 export type TemplateKey = RoomKind | EdgeStyle
@@ -37,6 +45,16 @@ export type Block = {
   pos: Vec3
   /** Quarter turns about +y (passages run along their room's side). */
   q: number
+  /** A stray's orientation (its frame to the world); upright blocks have none. */
+  orient?: Mat3
+  /** While a stray turns over: the orientation it turns from. */
+  turnFrom?: Mat3
+  /** 0–1 through a turn; 1 when settled. Turning blocks aren't solid. */
+  turnT: number
+  /** Length multiplier along the block's run (spurs reach into a stray's doorway). */
+  stretch: number
+  stray?: Stray
+  spur?: Spur
   /** 0–1: a passage unfolds out of its lower room. */
   extend: number
   open: Float32Array
@@ -48,8 +66,8 @@ export type Block = {
 
 type Tween = {
   block: Block
-  /** A part index, or "extend", or "pos". */
-  prop: number | "extend" | "pos"
+  /** A part index, or "extend", "pos" or "turn". */
+  prop: number | "extend" | "pos" | "turn"
   from: number | Vec3
   to: number | Vec3
   start: number
@@ -83,6 +101,32 @@ export function landings(e: Edge): { side: number; lane: number; room: number }[
 
 export type ShiftTiming = { length: number }
 
+/** How far a spur runs: from a hall's platform edge into the stray's doorway. */
+const SPUR_RUN = CELL - ROOM_R - WALL
+const SPUR_STRETCH = SPUR_RUN / SPAN
+
+/**
+ * Where a stray sits relative to its node: shifted so that every door that
+ * faces sideways has its sill level with the bridges and its middle on
+ * their line. (A turned room's doors are all alike, so one offset serves.)
+ */
+export function strayOffset(m: Mat3): Vec3 {
+  for (let d = 0; d < 4; d++) {
+    const n = apply(m, sideVector(d))
+    if (n[1] !== 0) continue
+    // The doorway, in the side's frame, then in the room's, then the world's.
+    const [ax, az] = turn(d, WALL - 0.2, -DOOR_W)
+    const [bx, bz] = turn(d, ROOM_R, DOOR_W)
+    const box = orientBox(m, [Math.min(ax, bx), 0, Math.min(az, bz)], [Math.max(ax, bx), DOOR_H, Math.max(az, bz)])
+    const across = n[0] !== 0 ? 2 : 0
+    const out: Vec3 = [0, -box.min[1], 0]
+    out[across] = -(box.min[across] + box.max[across]) / 2
+    return out
+  }
+  return [0, 0, 0]
+}
+
+const plus = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
 export class World {
   readonly castle: Castle
   readonly blocks = new Map<string, Block>()
@@ -96,6 +140,8 @@ export class World {
     this.templates = templates
     for (const room of castle.rooms.values()) this.addRoom(room)
     for (const edge of castle.edges.values()) this.addEdge(edge, 1)
+    for (const stray of castle.strays) this.addStray(stray)
+    for (const spur of castle.spurs()) this.addSpur(spur, 1)
     this.settleOpenings()
   }
 
@@ -105,6 +151,10 @@ export class World {
 
   roomBlock(id: number) {
     return this.blocks.get(`r${id}`)
+  }
+
+  strayBlock(id: number) {
+    return this.blocks.get(`x${id}`)
   }
 
   private addRoom(room: Room) {
@@ -119,8 +169,50 @@ export class World {
       open: new Float32Array(PART_COUNT),
       dying: false,
       seed: room.variant,
+      turnT: 1,
+      stretch: 1,
     }
     this.blocks.set(block.key, block)
+  }
+
+  private addStray(stray: Stray) {
+    const orient = TURNED[stray.orient]
+    const block: Block = {
+      key: `x${stray.id}`,
+      owner: stray.id,
+      template: "hall",
+      stray,
+      pos: plus(nodeCenter(stray.node), strayOffset(orient)),
+      q: 0,
+      orient,
+      extend: 1,
+      open: new Float32Array(PART_COUNT),
+      dying: false,
+      seed: (stray.id * 0.377) % 1,
+      turnT: 1,
+      stretch: 1,
+    }
+    this.blocks.set(block.key, block)
+  }
+
+  private addSpur(spur: Spur, extend: number) {
+    const anchor = this.castle.rooms.get(spur.anchor)!
+    const block: Block = {
+      key: `s${spur.key}`,
+      owner: this.nextEdgeOwner++,
+      template: "bridge",
+      spur,
+      pos: edgeOrigin(anchor, spur.dir),
+      q: spur.dir,
+      extend,
+      open: new Float32Array(PART_COUNT),
+      dying: false,
+      seed: (this.nextEdgeOwner * 0.618) % 1,
+      turnT: 1,
+      stretch: SPUR_STRETCH,
+    }
+    this.blocks.set(block.key, block)
+    return block
   }
 
   private addEdge(edge: Edge, extend: number) {
@@ -136,19 +228,38 @@ export class World {
       open: new Float32Array(PART_COUNT),
       dying: false,
       seed: (this.nextEdgeOwner * 0.618) % 1,
+      turnT: 1,
+      stretch: 1,
     }
     this.blocks.set(block.key, block)
     return block
   }
 
-  /** What each room's doors and gates should be, given its passages. */
-  private wanted(room: Room) {
+  /** Rooms and strays: everything with doors. */
+  private *doorBlocks() {
+    for (const room of this.castle.rooms.values()) yield this.roomBlock(room.id)!
+    for (const stray of this.castle.strays) yield this.strayBlock(stray.id)!
+  }
+
+  /** What a room's (or stray's) doors and gates should be, given its passages. */
+  private wanted(block: Block, spurs = this.castle.spurs()) {
     const open = new Float32Array(PART_COUNT)
-    for (const e of this.castle.edgesOf(room.id)) {
-      for (const l of landings(e)) {
-        if (l.room !== room.id) continue
-        open[doorPart(l.side)] = 1
-        open[gatePart(l.side, l.lane)] = 1
+    if (block.room) {
+      for (const e of this.castle.edgesOf(block.room.id)) {
+        for (const l of landings(e)) {
+          if (l.room !== block.room.id) continue
+          open[doorPart(l.side)] = 1
+          open[gatePart(l.side, l.lane)] = 1
+        }
+      }
+    }
+    for (const s of spurs) {
+      if (s.anchor === block.room?.id) {
+        open[doorPart(s.dir)] = 1
+        open[gatePart(s.dir, 1)] = 1
+      } else if (s.stray === block.stray?.id) {
+        open[doorPart(s.side)] = 1
+        open[gatePart(s.side, 1)] = 1
       }
     }
     return open
@@ -156,10 +267,10 @@ export class World {
 
   /** Snap every room's openings to its passages (at build time). */
   private settleOpenings() {
-    for (const room of this.castle.rooms.values()) {
-      const block = this.roomBlock(room.id)!
-      const want = this.wanted(room)
-      for (let p = 1; p < PART_COUNT; p++) if (p !== TRAP_PART) block.open[p] = want[p]
+    for (const block of this.doorBlocks()) {
+      const want = this.wanted(block)
+      // Doors and gates only: the trapdoor and roof keep their own state.
+      for (let p = 1; p < TRAP_PART; p++) block.open[p] = want[p]
     }
   }
 
@@ -198,22 +309,40 @@ export class World {
     const arrive = new Map<number, number>()
     let end = 1
 
-    for (const e of plan.removed) {
-      const block = this.blocks.get(`e${e.key}`)
+    const spurs = this.castle.spurs()
+    const keep = new Set(spurs.map((s) => `s${s.key}`))
+    const gone = [...plan.removed.map((e) => this.blocks.get(`e${e.key}`))]
+    for (const block of this.blocks.values()) if (block.spur && !block.dying && !keep.has(block.key)) gone.push(block)
+    for (const block of gone) {
       if (!block) continue
       block.dying = true
       const at = 0.25 + rnd() * 0.2
-      this.tween({ block, prop: "extend", from: 1, to: 0, at, dur: 0.55, ease: easeIn, done: () => this.blocks.delete(block.key) })
+      this.tween({ block, prop: "extend", from: block.extend, to: 0, at, dur: 0.55, ease: easeIn, done: () => this.blocks.delete(block.key) })
     }
 
-    // Doors first: whatever loses its passage slams shut.
-    for (const room of this.castle.rooms.values()) {
-      const block = this.roomBlock(room.id)!
-      const want = this.wanted(room)
-      for (let p = 1; p < PART_COUNT; p++) {
-        if (p === TRAP_PART) continue
+    // Doors first: whatever loses its passage slams shut. A stray about
+    // to turn over shuts every door.
+    const turning = new Set(plan.turned.map((t) => t.id))
+    for (const block of this.doorBlocks()) {
+      const want = block.stray && turning.has(block.stray.id) ? new Float32Array(PART_COUNT) : this.wanted(block, spurs)
+      for (let p = 1; p < TRAP_PART; p++) {
         if (want[p] < 0.5 && block.open[p] > 0.5) this.setPart(block, p, 0, 0.05 + rnd() * 0.25, 0.16, easeIn)
       }
+    }
+
+    for (const t of plan.turned) {
+      const block = this.strayBlock(t.id)!
+      const stray = block.stray!
+      const delay = 0.6 + rnd() * 0.4
+      const dur = 1.5
+      block.turnFrom = TURNED[t.from]
+      block.orient = TURNED[t.to]
+      block.turnT = 0
+      this.tween({ block, prop: "turn", from: 0, to: 1, at: delay, dur, ease: easeInOut })
+      const to = plus(nodeCenter(stray.node), strayOffset(block.orient))
+      this.tween({ block, prop: "pos", from: block.pos, to, at: delay, dur, ease: easeInOut })
+      arrive.set(t.id, delay + dur)
+      end = Math.max(end, delay + dur)
     }
 
     for (const m of plan.moves) {
@@ -226,6 +355,20 @@ export class World {
       this.tween({ block, prop: "pos", from, to, at: delay, dur, ease: easeInOut })
       arrive.set(m.id, delay + dur)
       end = Math.max(end, delay + dur)
+    }
+
+    for (const s of spurs) {
+      if (this.blocks.has(`s${s.key}`)) continue
+      const start = Math.max(arrive.get(s.anchor) ?? 0.95, arrive.get(s.stray) ?? 0.95) + 0.1
+      const block = this.addSpur(s, 0)
+      this.tween({ block, prop: "extend", from: 0, to: 1, at: start, dur: 0.6, ease: easeOutBack })
+      const anchor = this.roomBlock(s.anchor)!
+      const stray = this.strayBlock(s.stray)!
+      this.setPart(anchor, doorPart(s.dir), 1, start - 0.2, 0.3)
+      this.setPart(anchor, gatePart(s.dir, 1), 1, start - 0.15, 0.3)
+      this.setPart(stray, doorPart(s.side), 1, start + 0.3, 0.3)
+      this.setPart(stray, gatePart(s.side, 1), 1, start + 0.35, 0.3)
+      end = Math.max(end, start + 0.65)
     }
 
     for (const e of plan.added) {
@@ -273,6 +416,8 @@ export class World {
         t.block.open[t.prop] = (t.from as number) + ((t.to as number) - (t.from as number)) * t.ease(k)
       } else if (t.prop === "extend") {
         t.block.extend = (t.from as number) + ((t.to as number) - (t.from as number)) * t.ease(k)
+      } else if (t.prop === "turn") {
+        t.block.turnT = (t.from as number) + ((t.to as number) - (t.from as number)) * t.ease(k)
       } else {
         const a = t.from as Vec3
         const b = t.to as Vec3
@@ -297,15 +442,21 @@ export class World {
   collect(p: Vec3, radius: number, out: Box[] = []): Box[] {
     out.length = 0
     for (const block of this.blocks.values()) {
-      if (block.dying || block.extend < 0.999) continue
+      if (block.dying || block.extend < 0.999 || block.turnT < 1) continue
       const reach = radius + 16
       const c = this.blockCentre(block)
       if (Math.abs(c[0] - p[0]) > reach || Math.abs(c[1] - p[1]) > reach || Math.abs(c[2] - p[2]) > reach) continue
       const tpl = this.templates.get(block.template)!
       for (const b of tpl.boxes) {
         if (b.part && block.open[b.part] >= 0.5) continue
-        const [ax, az] = turn(block.q, b.min[0], b.min[2])
-        const [bx, bz] = turn(block.q, b.max[0], b.max[2])
+        if (block.orient) {
+          const o = orientBox(block.orient, b.min, b.max)
+          out.push({ min: plus(o.min, block.pos), max: plus(o.max, block.pos), owner: block.owner })
+          continue
+        }
+        const k = block.stretch
+        const [ax, az] = turn(block.q, b.min[0] * k, b.min[2])
+        const [bx, bz] = turn(block.q, b.max[0] * k, b.max[2])
         out.push({
           min: [Math.min(ax, bx) + block.pos[0], b.min[1] + block.pos[1], Math.min(az, bz) + block.pos[2]],
           max: [Math.max(ax, bx) + block.pos[0], b.max[1] + block.pos[1], Math.max(az, bz) + block.pos[2]],
@@ -317,9 +468,34 @@ export class World {
   }
 
   blockCentre(block: Block): Vec3 {
-    if (block.room) return block.pos
-    const [x, z] = turn(block.q, 6.2, 0)
+    if (block.room || block.stray) return block.pos
+    const [x, z] = turn(block.q, 6.2 * block.stretch, 0)
     return [block.pos[0] + x, block.pos[1] + LEVEL / 2, block.pos[2] + z]
+  }
+
+  /** The stray whose walls enclose a point, measured in its own frame. */
+  strayContaining(p: Vec3, margin = -0.25): Block | undefined {
+    for (const stray of this.castle.strays) {
+      const block = this.strayBlock(stray.id)!
+      if (block.turnT < 1) continue
+      const l = unapply(block.orient!, [p[0] - block.pos[0], p[1] - block.pos[1], p[2] - block.pos[2]])
+      if (Math.abs(l[0]) < WALL + margin && Math.abs(l[2]) < WALL + margin && l[1] > -0.4 && l[1] < WALL_H) return block
+    }
+    return undefined
+  }
+
+  /** The spur a point is on, short of the stray's doorway: there, down is down again. */
+  spurAt(p: Vec3): Block | undefined {
+    for (const block of this.blocks.values()) {
+      if (!block.spur || block.dying || block.extend < 0.999) continue
+      const [dx, dz] = DIRS[block.q]
+      const rel = [p[0] - block.pos[0], p[2] - block.pos[2]]
+      const along = rel[0] * dx + rel[1] * dz
+      const across = Math.abs(rel[0] * -dz + rel[1] * dx)
+      const dy = p[1] - block.pos[1]
+      if (along > -1 && along < SPUR_RUN - 0.25 && across < 1.7 && dy > -1.5 && dy < 3.4) return block
+    }
+    return undefined
   }
 
   blockByOwner(owner: number) {
@@ -339,11 +515,34 @@ export class World {
     return undefined
   }
 
-  /** Rooms and passages within reach of a point: they must not move under it. */
+  /** Rooms, passages and strays within reach of a point: they must not move under it. */
   near(p: Vec3, margin: number) {
     const rooms = new Set<number>()
     const edges = new Set<string>()
+    const strays = new Set<number>()
+    // In or by a stray (or on its spur), its halls must stay to let you out.
+    const keepStray = (id: number) => {
+      strays.add(id)
+      for (const s of this.castle.spurs()) if (s.stray === id) rooms.add(s.anchor)
+    }
     for (const block of this.blocks.values()) {
+      if (block.stray) {
+        const d = Math.max(...[0, 1, 2].map((i) => Math.abs(p[i] - block.pos[i])))
+        if (d < 9 + margin) keepStray(block.stray.id)
+        continue
+      }
+      if (block.spur) {
+        const [dx, dz] = DIRS[block.q]
+        const rel = [p[0] - block.pos[0], p[2] - block.pos[2]]
+        const along = rel[0] * dx + rel[1] * dz
+        const across = Math.abs(rel[0] * -dz + rel[1] * dx)
+        const dy = p[1] - block.pos[1]
+        if (along > -margin && along < SPUR_RUN + margin && across < 2 + margin && dy > -3 - margin && dy < 4 + margin) {
+          rooms.add(block.spur.anchor)
+          keepStray(block.spur.stray)
+        }
+        continue
+      }
       if (block.room) {
         const dx = Math.abs(p[0] - block.pos[0])
         const dz = Math.abs(p[2] - block.pos[2])
@@ -365,6 +564,6 @@ export class World {
         }
       }
     }
-    return { rooms, edges }
+    return { rooms, edges, strays }
   }
 }

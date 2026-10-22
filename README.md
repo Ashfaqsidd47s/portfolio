@@ -92,10 +92,11 @@ src/
 ├─ apps/                      # one folder per app, each its own chunk
 │  ├─ trypnow/                # supplier + agent demo: builder, AI listing, bookings, marketplace
 │  ├─ infinity-castle/        # Demon Slayer's Infinity Castle, first person (three.js + GLSL):
-│  │                          #   castle.ts (lattice + Nakime's shifts, + tests), physics.ts
+│  │                          #   castle.ts (lattice + Nakime's shifts + turned rooms, + tests),
+│  │                          #   orient.ts (quarter-turn orientations, + tests), physics.ts
 │  │                          #   (any-axis gravity, + tests), world.ts (live blocks, strum
 │  │                          #   timeline), game.ts, audio.ts (synth biwa), score.ts (chase music),
-│  │                          #   render/ (kit, shaders)
+│  │                          #   render/ (kit, shaders, drop: the opening fall)
 │  ├─ about/
 │  └─ project-info/           # stand-in for projects whose demo isn't built yet
 ├─ data/profile.ts            # single source of truth for all content
@@ -175,6 +176,15 @@ src/
 
 ### Infinity Castle (`/apps/infinity-castle`)
 
+- **The way in is a fall.** Behind the title you drop, endlessly, down a
+  well of stacked rooms with their floors cut away: shoji and fusuma walls,
+  polished ledges, gold nail covers. It wraps round the camera. Its storeys
+  keep turning a quarter and slamming their panels. Click in and the fall
+  speeds up, the turning gets faster, and then a strum blows the well
+  apart. You fall on through the open void past rooms tumbling every which
+  way, and the castle shifts below you. The hall you're aimed at splits
+  its ceiling and roof in four to take you, and closes over you once
+  you've landed. The column you fall down is kept clear until then.
 - **The castle is a lattice**: rooms on a 5 × 6 × 5 grid of nodes, joined by
   bridges, enclosed shoji corridors and long stairs in the gaps between them.
   Every room has a veranda, so passages land in lanes (bridges opposite the
@@ -190,9 +200,18 @@ src/
   glide, new passages unfold, and doors all over the castle bang shut and fly
   open in a wave. Some strums open the trapdoor under you or turn your room
   over (gravity onto a wall or the ceiling) until the next strum.
+- **Turned rooms**: a few full rooms sit upside down or on their side in
+  empty nodes, with the nodes above and below them kept free. A bridge
+  stretches from a hall beside one into whichever of its doors faces that
+  way. Step through the door and its floor becomes the floor: the world
+  rolls over, and you can walk its tatami with the castle hanging sideways
+  or overhead outside. Step back onto the bridge and down is down again.
+  Strums turn them over too, and their bridges fold away and unfold to
+  match.
 - **Physics** is a box against axis-aligned boxes, with gravity along any of
   six axes, step-up and ground snapping for the stairs, substeps so a long
-  fall can't tunnel, and moving floors that carry you. Fall out of the
+  fall can't tunnel, and moving floors that carry you. Every orientation is
+  a quarter turn, so a turned room's collision boxes stay axis-aligned. Fall out of the
   castle and Nakime drops you into a room somewhere else.
 - **Rendering**: each room or passage is one merged mesh. Its vertices carry
   a material id and a moving part (door, rail gate, trapdoor) that the vertex
@@ -201,8 +220,9 @@ src/
   tiles, chōchin lanterns and the Upper Moons' rooms procedurally, lit by
   the block's own lanterns. Beyond reach, ~3,700 instanced rooms (some
   upside down or on their side) step to new places on every strum. Post:
-  bloom, then a pass for the strum's shockwave, colour fringing, teal/amber
-  grading, vignette and grain. Resolution adapts to hold the frame rate.
+  bloom, then a pass for the strum's shockwave, colour fringing, a zoom blur
+  and anime speed lines while you fall, teal/amber grading, vignette and
+  grain. While you fall, the distant castle shifts several times a second. Resolution adapts to hold the frame rate.
 - **Goal**: Tanjiro's nose (an arrow round the crosshair) points to the
   nearest Upper Moon's room. Find Kokushibo's moon hall, Doma's lotus pond
   and Akaza's ring and Nakime's chamber unseals; reach her and the castle is

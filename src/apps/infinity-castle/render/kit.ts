@@ -13,21 +13,25 @@ import { Builder, MAT, type Light, type LocalBox } from "./builder"
  *
  * Moving parts (see `builder.ts`), per side d (0 +x, 1 +z, 2 −x, 3 −z):
  * door d + 1; rail gates 5 + 3d + lane (lane 0 at −STAIR_LANE along the
- * side, 1 in the middle, 2 at +STAIR_LANE); the trapdoor is 17.
+ * side, 1 in the middle, 2 at +STAIR_LANE); the trapdoor is 17; a hall's
+ * ceiling and roof, which split in four and fly apart to let someone fall
+ * in, are 18.
  */
 
-export const PART_COUNT = 18
+export const PART_COUNT = 19
 export const MAX_LIGHTS = 10
 export const doorPart = (side: number) => 1 + side
 export const gatePart = (side: number, lane: number) => 5 + side * 3 + lane
 export const TRAP_PART = 17
+export const ROOF_PART = 18
 
 /** Wall plane: the tatami room is 2·WALL across. */
 export const WALL = 4.6
 const R = ROOM_R
-const WALL_H = 3.4
-const DOOR_W = 1.6
-const DOOR_H = 2.9
+export const WALL_H = 3.4
+/** Half the width of a doorway, and its height. */
+export const DOOR_W = 1.6
+export const DOOR_H = 2.9
 const TRAP = 1.5
 const STAIR_HALF = 1.1
 const GATE_HALF = 1.25
@@ -38,11 +42,11 @@ export type Template = {
   lights: Light[]
 }
 
-const WARM: Vec3 = [1.0, 0.52, 0.22]
+export const WARM: Vec3 = [1.0, 0.52, 0.22]
 const PALE: Vec3 = [1.0, 0.78, 0.5]
 
 /** A red paper chōchin hanging from a cord. */
-function lantern(b: Builder, x: number, y: number, z: number, size = 1, cord = 0.5) {
+export function lantern(b: Builder, x: number, y: number, z: number, size = 1, cord = 0.5) {
   const r = 0.26 * size
   const h = 0.58 * size
   const profile: [number, number][] = []
@@ -134,7 +138,15 @@ function rail(b: Builder, side: number, mat: number = MAT.lacquer) {
   run(z, R, 0)
 }
 
-type Shell = { wall: number; transom: number; doors: number; lightColor: Vec3; inner: Vec3[] }
+type Shell = {
+  wall: number
+  transom: number
+  doors: number
+  lightColor: Vec3
+  inner: Vec3[]
+  /** The ceiling and roof are a moving part (halls only). */
+  skylight?: boolean
+}
 
 /** Walls of sliding doors, the ceiling and a hipped roof. */
 function shell(b: Builder, s: Shell) {
@@ -169,45 +181,60 @@ function shell(b: Builder, s: Shell) {
       rail(b, d)
     })
   }
-  // Ceiling: coffered inside, a broad eave outside.
+  // Ceiling: coffered inside, a broad eave outside. Built a quarter at a
+  // time (a pinwheel of quadrants) so a hall's can split and fly apart.
   const top = WALL_H + 0.25
-  b.box([-WALL, WALL_H, -WALL], [WALL, top, WALL], MAT.woodDark)
-  for (const c of [-2.3, 0, 2.3]) {
-    b.box([-WALL, WALL_H - 0.16, c - 0.07], [WALL, WALL_H, c + 0.07], MAT.woodDark, { grain: true })
-    b.box([c - 0.07, WALL_H - 0.16, -WALL], [c + 0.07, WALL_H, WALL], MAT.woodDark, { grain: true })
-  }
   const E = WALL + 0.62
-  b.box([-E, top, -E], [E, top + 0.2, E], MAT.woodDark)
-  b.solid([-E, WALL_H, -E], [E, top + 0.2, E])
-  roof(b, E + 0.1, top + 0.2, 1.1, 6.4)
+  const lid = s.skylight ? ROOF_PART : 0
+  for (let d = 0; d < 4; d++) {
+    b.frame(d, [0, 0, 0], () => {
+      b.moving(lid, [9, 26, -9], () => {
+        b.box([0, WALL_H, -WALL], [WALL, top, 0], MAT.woodDark)
+        b.box([0, WALL_H - 0.16, -2.37], [WALL, WALL_H, -2.23], MAT.woodDark, { grain: true })
+        b.box([2.23, WALL_H - 0.16, -WALL], [2.37, WALL_H, 0], MAT.woodDark, { grain: true })
+        b.box([0, WALL_H - 0.16, -0.07], [WALL, WALL_H, 0], MAT.woodDark, { grain: true })
+        b.box([0, WALL_H - 0.16, -WALL], [0.07, WALL_H, 0], MAT.woodDark, { grain: true })
+        b.box([0, top, -E], [E, top + 0.2, 0], MAT.woodDark)
+      })
+    })
+  }
+  b.solid([-E, WALL_H, -E], [E, top + 0.2, E], lid)
+  roof(b, E + 0.1, top + 0.2, 1.1, 6.4, lid)
   for (const p of s.inner) {
     lantern(b, p[0], p[1], p[2], 1, WALL_H - p[1])
     b.light([p[0], p[1] - 0.35, p[2]], s.lightColor)
   }
 }
 
-/** A hipped roof from an eave half-width `e` at `y0` up to a cap at `y1`. */
-function roof(b: Builder, e: number, y0: number, cap: number, y1: number) {
+/**
+ * A hipped roof from an eave half-width `e` at `y0` up to a cap at `y1`.
+ * As moving part `part`, each face flies off its own side and the cap goes up.
+ */
+function roof(b: Builder, e: number, y0: number, cap: number, y1: number, part = 0) {
   for (let d = 0; d < 4; d++) {
     b.frame(d, [0, 0, 0], () => {
-      const slope = Math.hypot(e - cap, y1 - y0)
-      b.quad([e, y0, e], [e, y0, -e], [cap, y1, -cap], [cap, y1, cap], MAT.roof, [
-        [-e, 0],
-        [e, 0],
-        [cap, slope],
-        [-cap, slope],
-      ])
-      // Upturned corner tip.
-      b.box([e - 0.25, y0 - 0.05, e - 0.25], [e + 0.2, y0 + 0.18, e + 0.2], MAT.woodDark)
+      b.moving(part, [14, 22, 0], () => {
+        const slope = Math.hypot(e - cap, y1 - y0)
+        b.quad([e, y0, e], [e, y0, -e], [cap, y1, -cap], [cap, y1, cap], MAT.roof, [
+          [-e, 0],
+          [e, 0],
+          [cap, slope],
+          [-cap, slope],
+        ])
+        // Upturned corner tip.
+        b.box([e - 0.25, y0 - 0.05, e - 0.25], [e + 0.2, y0 + 0.18, e + 0.2], MAT.woodDark)
+      })
     })
   }
-  b.box([-cap - 0.1, y1, -cap - 0.1], [cap + 0.1, y1 + 0.18, cap + 0.1], MAT.woodDark)
-  b.box([-0.18, y1 + 0.18, -cap], [0.18, y1 + 0.42, cap], MAT.roof)
+  b.moving(part, [0, 34, 0], () => {
+    b.box([-cap - 0.1, y1, -cap - 0.1], [cap + 0.1, y1 + 0.18, cap + 0.1], MAT.woodDark)
+    b.box([-0.18, y1 + 0.18, -cap], [0.18, y1 + 0.42, cap], MAT.roof)
+  })
   // Something to stand on after a fall: the roof as four terraces.
   for (let i = 0; i < 4; i++) {
     const w = e - (i * (e - cap)) / 4
     const h = y0 + ((i + 0.6) * (y1 - y0)) / 4
-    b.solid([-w, y0, -w], [w, h, w])
+    b.solid([-w, y0, -w], [w, h, w], part)
   }
 }
 
@@ -223,7 +250,7 @@ export function buildRoom(kind: RoomKind): Template {
   switch (kind) {
     case "hall":
       platform(b, { trap: true, floor: MAT.tatami })
-      shell(b, { wall: MAT.fusuma, transom: MAT.shoji, doors: MAT.fusuma, lightColor: WARM, inner: INNER })
+      shell(b, { wall: MAT.fusuma, transom: MAT.shoji, doors: MAT.fusuma, lightColor: WARM, inner: INNER, skylight: true })
       break
     case "akaza":
       akaza(b)
