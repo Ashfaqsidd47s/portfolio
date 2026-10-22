@@ -94,7 +94,8 @@ src/
 │  ├─ infinity-castle/        # Demon Slayer's Infinity Castle, first person (three.js + GLSL):
 │  │                          #   castle.ts (lattice + Nakime's shifts, + tests), physics.ts
 │  │                          #   (any-axis gravity, + tests), world.ts (live blocks, strum
-│  │                          #   timeline), game.ts, audio.ts (synth biwa), render/ (kit, shaders)
+│  │                          #   timeline), game.ts, audio.ts (synth biwa), score.ts (chase music),
+│  │                          #   render/ (kit, shaders)
 │  ├─ about/
 │  └─ project-info/           # stand-in for projects whose demo isn't built yet
 ├─ data/profile.ts            # single source of truth for all content
@@ -209,6 +210,14 @@ src/
 - **Sound** is synthesised: a Karplus–Strong biwa with a buzzing attack, a
   long echo, sliding fusuma, rumbling rooms, steps, wind and Nakime's melody,
   positioned where she sits.
+- **Music**: an original chase score (`score.ts`), scheduled ahead on the
+  audio clock: odaiko and shime drums, a staccato biwa riff and a low men's
+  chorus chanting long "nooo" calls answered by quick "to-no-no-no"s, all in
+  the in scale. A quiet chant waits during the drop; the drums and biwa come
+  in once the chase starts, harder when you run, fall or the castle moves,
+  and a drum roll carries the finale. It has its own on/off toggle. To use a
+  recording instead, put it at `public/audio/infinity-castle.mp3` (a track
+  you have the rights to publish); it replaces the synthesised score.
 - **Controls**: WASD / mouse (pointer lock, or drag where it's refused),
   Shift, Space, F. On touch: a floating joystick on the left (push far to
   run), drag on the right to look, tap to jump. Esc or losing focus pauses.

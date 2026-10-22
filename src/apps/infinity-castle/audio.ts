@@ -7,11 +7,21 @@
  * main note, then its octave. The castle answers with a long echo.
  * Underneath: a low drone, sliding fusuma, rumbling rooms, wooden steps,
  * wind when falling, and her idle melody, positioned where she sits.
+ * Over it all, the chase score (score.ts), on its own bus so it can be
+ * turned off separately — or, if the site ships one at TRACK, a recording.
  */
+
+import { Score, type ScoreMode } from "./score"
 
 type Vec3 = [number, number, number]
 
 const SR = 44100
+
+/** An optional recorded score; if it's absent the synthesised one plays. */
+const TRACK = `${import.meta.env.BASE_URL}audio/infinity-castle.mp3`
+const TRACK_LEVEL: Record<ScoreMode, number> = { off: 0, wait: 0.5, chase: 1, finale: 0 }
+/** The score sits under the castle's own sounds. */
+const MUSIC_LEVEL = 0.4
 
 function pluck(freq: number, seconds: number, opts: { buzz: number; bright: number; decay: number }) {
   const n = Math.floor(SR * seconds)
@@ -75,6 +85,12 @@ export class CastleAudio {
   private nakime!: PannerNode
   private melodyTimer = 0
   private muted = false
+  private musicBus!: GainNode
+  private musicOn = true
+  private score: Score | null = null
+  private scoreMode: ScoreMode = "off"
+  private track: HTMLAudioElement | null = null
+  private trackGain: GainNode | null = null
 
   get ready() {
     return this.ctx !== null
@@ -116,6 +132,37 @@ export class CastleAudio {
     this.nakime.rolloffFactor = 1.1
     this.nakime.connect(this.master)
     this.nakime.connect(this.verbSend)
+
+    this.musicBus = ctx.createGain()
+    this.musicBus.gain.value = this.musicOn ? MUSIC_LEVEL : 0
+    this.musicBus.connect(this.master)
+    const musicVerb = ctx.createGain()
+    musicVerb.gain.value = 0.5
+    musicVerb.connect(this.verbSend)
+    this.score = new Score({ ctx, out: this.musicBus, verb: musicVerb, noise: this.noise, biwa: (f) => this.note(f) })
+    this.score.setMode(this.scoreMode)
+    this.loadTrack(ctx)
+  }
+
+  /** Swaps the synthesised score for a recording, if the site has one. */
+  private loadTrack(ctx: AudioContext) {
+    const el = new Audio()
+    el.loop = true
+    el.preload = "auto"
+    el.addEventListener(
+      "canplaythrough",
+      () => {
+        if (this.ctx !== ctx) return
+        this.trackGain = ctx.createGain()
+        this.trackGain.gain.value = 0
+        ctx.createMediaElementSource(el).connect(this.trackGain).connect(this.musicBus)
+        this.track = el
+        this.score?.setMode("off")
+        this.setMusicMode(this.scoreMode)
+      },
+      { once: true }
+    )
+    el.src = TRACK
   }
 
   setMuted(muted: boolean) {
@@ -123,12 +170,48 @@ export class CastleAudio {
     if (this.ctx) this.master.gain.setTargetAtTime(muted ? 0 : 0.8, this.ctx.currentTime, 0.05)
   }
 
+  setMusic(on: boolean) {
+    this.musicOn = on
+    if (this.ctx) this.musicBus.gain.setTargetAtTime(on ? MUSIC_LEVEL : 0, this.ctx.currentTime, 0.1)
+  }
+
+  /** Where the score is: waiting, chasing, or rising with the castle. */
+  setMusicMode(mode: ScoreMode) {
+    this.scoreMode = mode
+    if (!this.ctx) return
+    if (!this.track || !this.trackGain) {
+      this.score?.setMode(mode)
+      return
+    }
+    const level = TRACK_LEVEL[mode]
+    this.trackGain.gain.setTargetAtTime(level, this.ctx.currentTime, mode === "finale" ? 2 : 0.6)
+    if (level > 0 && this.track.paused) void this.track.play().catch(() => {})
+  }
+
+  /** 0–1: how hard the chase is going. */
+  setMusicIntensity(level: number) {
+    this.score?.setIntensity(level)
+  }
+
+  /** The drums answer a strum. */
+  musicHit() {
+    if (!this.track) this.score?.hit()
+  }
+
+  tickMusic(dt: number) {
+    if (!this.ctx) return
+    if (!this.track) this.score?.tick(dt)
+    else if (TRACK_LEVEL[this.scoreMode] === 0 && !this.track.paused && this.trackGain!.gain.value < 0.01) this.track.pause()
+  }
+
   suspend() {
     void this.ctx?.suspend()
+    this.track?.pause()
   }
 
   resume() {
     void this.ctx?.resume()
+    if (this.track && TRACK_LEVEL[this.scoreMode] > 0) void this.track.play().catch(() => {})
   }
 
   private note(freq: number) {
@@ -343,6 +426,9 @@ export class CastleAudio {
   }
 
   dispose() {
+    this.track?.pause()
+    this.track?.removeAttribute("src")
+    this.track = null
     void this.ctx?.close()
     this.ctx = null
   }
