@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useReducedMotion } from "motion/react"
-import { ArrowUp, Music2, Pause, Volume2, VolumeX } from "lucide-react"
+import { ArrowUp, Drum, Music2, Pause, Volume2, VolumeX } from "lucide-react"
 import "@fontsource/cormorant-garamond/latin-400-italic.css"
 import "@fontsource/cormorant-garamond/latin-500.css"
 import { cn } from "@/lib/utils"
@@ -14,19 +14,30 @@ import { LANDMARKS, type Landmark } from "./castle"
 const SERIF = "font-['Cormorant_Garamond',Georgia,serif]"
 const KANJI = "font-['Noto_Serif_JP','Yu_Mincho','Hiragino_Mincho_ProN',serif]"
 const MUTE_KEY = "infinity-castle-muted"
+const MUSIC_KEY = "infinity-castle-music-off"
 
 type Toast = { id: number; title: string; sub?: string }
 
 const chip =
   "pointer-events-auto inline-flex size-9 items-center justify-center rounded-full border border-[#e0a25a]/30 bg-black/40 text-[#f3e3c6]/85 backdrop-blur-sm transition-colors hover:border-[#e0a25a]/70 hover:text-[#f3e3c6] focus-visible:outline-2 focus-visible:outline-[#e0a25a]"
 
-const readMuted = () => {
+const readFlag = (key: string) => {
   try {
-    return window.localStorage.getItem(MUTE_KEY) === "1"
+    return window.localStorage.getItem(key) === "1"
   } catch {
     return false
   }
 }
+
+const writeFlag = (key: string, on: boolean) => {
+  try {
+    window.localStorage.setItem(key, on ? "1" : "0")
+  } catch {
+    /* non-fatal */
+  }
+}
+
+const readMuted = () => readFlag(MUTE_KEY)
 
 const isTouchDevice = () => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches
 
@@ -55,6 +66,7 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
   const [error, setError] = React.useState<string | null>(null)
   const [paused, setPaused] = React.useState(false)
   const [muted, setMuted] = React.useState(readMuted)
+  const [musicOff, setMusicOff] = React.useState(() => readFlag(MUSIC_KEY))
   const [found, setFound] = React.useState<Landmark[]>([])
   const [toasts, setToasts] = React.useState<Toast[]>([])
   const [titlecard, setTitlecard] = React.useState(false)
@@ -117,6 +129,7 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
     }
     audioRef.current = new CastleAudio()
     audioRef.current.setMuted(readMuted())
+    audioRef.current.setMusic(!readFlag(MUSIC_KEY))
     newGame()
     return () => {
       gameRef.current?.dispose()
@@ -242,11 +255,14 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
     const next = !muted
     setMuted(next)
     audioRef.current?.setMuted(next)
-    try {
-      window.localStorage.setItem(MUTE_KEY, next ? "1" : "0")
-    } catch {
-      /* non-fatal */
-    }
+    writeFlag(MUTE_KEY, next)
+  }
+
+  const toggleMusic = () => {
+    const next = !musicOff
+    setMusicOff(next)
+    audioRef.current?.setMusic(!next)
+    writeFlag(MUSIC_KEY, next)
   }
 
   return (
@@ -297,6 +313,16 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
             <div className="flex gap-2">
               <button type="button" className={chip} onClick={() => gameRef.current?.strum({ manual: true })} aria-label="Provoke the biwa (F)" title="Provoke the biwa (F)">
                 <Music2 className="size-4" aria-hidden />
+              </button>
+              <button
+                type="button"
+                className={cn(chip, musicOff && "text-[#f3e3c6]/40")}
+                onClick={toggleMusic}
+                aria-label={musicOff ? "Music on" : "Music off"}
+                aria-pressed={!musicOff}
+                title={musicOff ? "Music on" : "Music off"}
+              >
+                <Drum className="size-4" aria-hidden />
               </button>
               <button type="button" className={chip} onClick={toggleMute} aria-label={muted ? "Sound on" : "Sound off"} title={muted ? "Sound on" : "Sound off"}>
                 {muted ? <VolumeX className="size-4" aria-hidden /> : <Volume2 className="size-4" aria-hidden />}

@@ -1,6 +1,7 @@
 import * as THREE from "three"
 import { Castle, CELL, LANDMARKS, LEVEL, nodeCenter, type Landmark, type Node, type Vec3 } from "./castle"
 import type { CastleAudio } from "./audio"
+import type { ScoreMode } from "./score"
 import { BODY, createBody, depenetrate, step, upVector, type Body, type Box, type Up } from "./physics"
 import type { Output } from "./render/output"
 import { TRAP_PART, doorPart } from "./render/kit"
@@ -59,6 +60,8 @@ const ROOM_TURNS: Up[] = [
   { axis: 2, sign: 1 },
   { axis: 2, sign: -1 },
 ]
+
+const MUSIC: Record<Phase, ScoreMode> = { title: "off", intro: "wait", play: "chase", finale: "finale", ended: "off" }
 
 const WALK = 4.6
 const RUN = 8.2
@@ -126,6 +129,7 @@ export class Game {
   private setPhase(phase: Phase) {
     this.phase = phase
     this.phaseTime = 0
+    this.audio.setMusicMode(MUSIC[phase])
     this.emit({ type: "phase", phase })
   }
 
@@ -186,6 +190,7 @@ export class Game {
     this.audio.strum(opts.heavy)
     this.audio.slam(2 + Math.min(4, plan.removed.length))
     this.audio.rumble(Math.max(1.5, length))
+    if (playing) this.audio.musicHit()
     this.emit({ type: "strum" })
     if (!playing || opts.intro) return
 
@@ -308,6 +313,7 @@ export class Game {
       this.pending.splice(this.pending.indexOf(job), 1)
       job.fn()
     }
+    this.audio.tickMusic(dt)
 
     const before = new Map<number, Vec3>()
     for (const b of this.world.blocks.values()) if (b.room) before.set(b.owner, b.pos)
@@ -397,6 +403,9 @@ export class Game {
     const fallSpeed = -body.up.sign * body.vel[u]
     const fall = body.grounded ? 0 : Math.max(0, Math.min(1, (fallSpeed - 6) / 30))
     this.audio.setWind(fall)
+    // The score drives harder when you run, fall, or the castle has just moved.
+    const running = this.input.run && body.grounded && moved > dt * WALK * 0.5
+    this.audio.setMusicIntensity(Math.max(running ? 0.95 : 0.65, fall > 0.1 ? 1 : 0, this.time - this.lastStrum < 4 ? 0.9 : 0))
 
     if (this.phase === "intro" && body.grounded && this.phaseTime > 4 && fallSpeed <= 0 && this.time - this.lastStrum > 2.5) {
       this.setPhase("play")
