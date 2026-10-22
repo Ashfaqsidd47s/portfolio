@@ -2,6 +2,7 @@ import * as THREE from "three"
 import { CELL, LEVEL, type Vec3 } from "../castle"
 import type { Block, TemplateKey, World } from "../world"
 import { Builder, turn } from "./builder"
+import { Drop, quatOf } from "./drop"
 import { MAX_LIGHTS, PART_COUNT, buildEdge, buildRoom, type Template } from "./kit"
 import {
   castleFragment,
@@ -31,8 +32,21 @@ export function buildTemplates() {
   return map
 }
 
-export type FrameFx = { time: number; pulse: number; strum: number; strumT: number; fall: number; pixel: number; glow: number }
+export type FrameFx = {
+  time: number
+  pulse: number
+  /** The far castle's step count, and the (scaled) time since its last step. */
+  strum: number
+  strumT: number
+  fall: number
+  pixel: number
+  glow: number
+}
 
+/** Where the visitor falls in: the landing column, and the heights the drop spans. */
+export type DropSite = { column: [number, number]; node: [number, number]; span: [number, number] }
+
+const local = new THREE.Vector3()
 export class CastleView {
   readonly scene = new THREE.Scene()
   readonly camera = new THREE.PerspectiveCamera(74, 1, 0.05, 1400)
@@ -43,6 +57,8 @@ export class CastleView {
   private glows: THREE.Points
   private embers: THREE.Points
   private sky: THREE.Mesh
+  /** The well and the void of the opening fall; gone once you've landed. */
+  readonly drop: Drop
   private shared = {
     uTime: { value: 0 },
     uPulse: { value: 0 },
@@ -52,7 +68,7 @@ export class CastleView {
     uFall: { value: 0 },
   }
 
-  constructor(templates: Map<TemplateKey, Template>, bounds: { x: number; y: number; z: number }) {
+  constructor(templates: Map<TemplateKey, Template>, bounds: { x: number; y: number; z: number }, site: DropSite) {
     this.templates = templates
     this.base = new THREE.ShaderMaterial({
       vertexShader: castleVertex,
@@ -89,19 +105,20 @@ export class CastleView {
     this.sky.renderOrder = -10
     this.scene.add(this.sky)
 
-    const { far, glows } = this.buildFar(bounds)
+    const { far, glows } = this.buildFar(bounds, site.node)
     this.far = far
     this.glows = glows
     this.embers = this.buildEmbers()
     this.scene.add(this.far, this.glows, this.embers)
+
+    this.drop = new Drop((tpl, seed) => this.material(tpl, seed, seed), templates.get("hall")!, site.column, site.span)
+    this.scene.add(this.drop.group)
   }
 
   // ── The near castle ────────────────────────────────────────────────────
 
-  private meshFor(block: Block) {
-    let mesh = this.meshes.get(block.key)
-    if (mesh) return mesh
-    const tpl = this.templates.get(block.template)!
+  /** The castle material for one template: its own lanterns, doors and paint. */
+  material(tpl: Template, seed: number, variant: number) {
     const mat = this.base.clone()
     const u = mat.uniforms
     Object.assign(u, FOG)
@@ -111,9 +128,21 @@ export class CastleView {
     u.uLightPos = { value: pad(tpl.lights.map((l) => l.pos)) }
     u.uLightCol = { value: pad(tpl.lights.map((l) => l.color)) }
     u.uOpen = { value: new Array(PART_COUNT).fill(0) }
+    u.uCamLocal = { value: new THREE.Vector3() }
+    u.uSeed = { value: seed }
+    u.uVariant = { value: variant }
+    u.uTime = { value: 0 }
+    u.uPulse = { value: 0 }
+    u.uGlow = { value: 1 }
     u.uLightCount.value = tpl.lights.length
-    u.uSeed.value = block.seed
-    u.uVariant.value = block.room ? (block.seed * 7.31) % 1 : 0
+    return mat
+  }
+
+  private meshFor(block: Block) {
+    let mesh = this.meshes.get(block.key)
+    if (mesh) return mesh
+    const tpl = this.templates.get(block.template)!
+    const mat = this.material(tpl, block.seed, block.room || block.stray ? (block.seed * 7.31) % 1 : 0)
     mesh = new THREE.Mesh(tpl.geometry, mat)
     mesh.rotation.y = (-block.q * Math.PI) / 2
     mesh.matrixAutoUpdate = true
@@ -130,14 +159,18 @@ export class CastleView {
       const mesh = this.meshFor(block)
       const e = Math.max(block.extend, 0.001)
       mesh.position.set(...block.pos)
-      mesh.scale.set(e, block.template === "stair" ? e : 1, 1)
+      mesh.scale.set(e * block.stretch, block.template === "stair" ? e : 1, 1)
+      if (block.orient) {
+        // A stray: set down its own way up, or partway through turning over.
+        mesh.quaternion.copy(quatOf(block.orient))
+        if (block.turnT < 1 && block.turnFrom) mesh.quaternion.slerpQuaternions(quatOf(block.turnFrom), quatOf(block.orient), block.turnT)
+      }
       mesh.visible = block.extend > 0.002
       const u = (mesh.material as THREE.ShaderMaterial).uniforms
       const open = u.uOpen.value as number[]
       for (let i = 0; i < PART_COUNT; i++) open[i] = block.open[i]
-      const rel = [cam.x - block.pos[0], cam.z - block.pos[2]]
-      const [lx, lz] = turn(-block.q, rel[0], rel[1])
-      u.uCamLocal.value.set(lx / e, (cam.y - block.pos[1]) / (block.template === "stair" ? e : 1), lz)
+      mesh.updateMatrixWorld()
+      u.uCamLocal.value.copy(mesh.worldToLocal(local.copy(cam)))
       u.uTime.value = fx.time
       u.uPulse.value = fx.pulse
       u.uGlow.value = fx.glow
@@ -155,11 +188,12 @@ export class CastleView {
     this.shared.uPixel.value = fx.pixel
     this.shared.uFall.value = fx.fall
     this.sky.position.copy(cam)
+    this.drop.sync(cam, fx)
   }
 
   // ── The castle beyond reach ────────────────────────────────────────────
 
-  private buildFar(bounds: { x: number; y: number; z: number }) {
+  private buildFar(bounds: { x: number; y: number; z: number }, clear: [number, number]) {
     // One simplified room: platform, walls, hipped roof, stilts.
     const b = new Builder()
     b.box([-5.8, -0.7, -5.8], [5.8, 0, 5.8], 0)
@@ -186,8 +220,10 @@ export class CastleView {
       s = (s * 16807) % 2147483647
       return s / 2147483647
     }
+    // The castle itself, and the sky over the landing hall that the visitor falls down.
     const inside = (i: number, k: number, j: number) =>
-      i >= -1 && i <= bounds.x && j >= -1 && j <= bounds.z && k >= -2 && k <= bounds.y + 1
+      (i >= -1 && i <= bounds.x && j >= -1 && j <= bounds.z && k >= -2 && k <= bounds.y + 1) ||
+      (Math.abs(i - clear[0]) <= 1 && Math.abs(j - clear[1]) <= 1 && k >= bounds.y - 1)
     const R = 13
     for (let i = -R; i < bounds.x + R; i++) {
       for (let j = -R; j < bounds.z + R; j++) {
@@ -314,6 +350,7 @@ export class CastleView {
     this.glows.geometry.dispose()
     this.embers.geometry.dispose()
     this.sky.geometry.dispose()
+    this.drop.dispose()
   }
 }
 
