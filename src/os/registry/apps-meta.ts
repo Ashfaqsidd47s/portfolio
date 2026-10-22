@@ -125,6 +125,14 @@ export const appsMeta: AppMeta[] = [
     window: { width: 1100, height: 760, minWidth: 520, minHeight: 480 },
   },
   {
+    id: "infinity-castle",
+    name: "Infinity Castle",
+    description: "Demon Slayer's Infinity Castle, walkable in first person: every strum of Nakime's biwa rearranges the rooms around you.",
+    kind: "side-project",
+    column: "right",
+    window: { width: 1100, height: 720, minWidth: 420, minHeight: 420 },
+  },
+  {
     id: "about",
     name: "About me",
     description: "Who I am, what I work on, and how to reach me.",

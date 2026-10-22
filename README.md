@@ -91,6 +91,10 @@ src/
 │  └─ kernel/                 # seeded randomness, crash-proof localStorage
 ├─ apps/                      # one folder per app, each its own chunk
 │  ├─ trypnow/                # supplier + agent demo: builder, AI listing, bookings, marketplace
+│  ├─ infinity-castle/        # Demon Slayer's Infinity Castle, first person (three.js + GLSL):
+│  │                          #   castle.ts (lattice + Nakime's shifts, + tests), physics.ts
+│  │                          #   (any-axis gravity, + tests), world.ts (live blocks, strum
+│  │                          #   timeline), game.ts, audio.ts (synth biwa), render/ (kit, shaders)
 │  ├─ about/
 │  └─ project-info/           # stand-in for projects whose demo isn't built yet
 ├─ data/profile.ts            # single source of truth for all content
@@ -167,6 +171,47 @@ src/
   wallpaper and theme on the shell's `data-wallpaper` attribute.
 - **Demo data** is seeded (same for every visitor), saved in the visitor's
   browser, and resettable from the app.
+
+### Infinity Castle (`/apps/infinity-castle`)
+
+- **The castle is a lattice**: rooms on a 5 × 6 × 5 grid of nodes, joined by
+  bridges, enclosed shoji corridors and long stairs in the gaps between them.
+  Every room has a veranda, so passages land in lanes (bridges opposite the
+  door, stairs to the right of the way they climb) and can never collide:
+  any two neighbouring rooms can always be joined, which is what keeps the
+  maze connected through every shift.
+- **Nakime's biwa**: a strum comes every 30–48 m walked (or after 50 s, or
+  on `F`). `Castle.shift` slides a few rooms to new nodes and re-wires the
+  passages: a spanning tree that prefers the passages already there, so the
+  castle changes around you rather than being replaced. Whatever you stand
+  in, on or next to is locked, and no room slides through you. `World.play`
+  turns the plan into a timeline: doors slam, passages fold away, rooms
+  glide, new passages unfold, and doors all over the castle bang shut and fly
+  open in a wave. Some strums open the trapdoor under you or turn your room
+  over (gravity onto a wall or the ceiling) until the next strum.
+- **Physics** is a box against axis-aligned boxes, with gravity along any of
+  six axes, step-up and ground snapping for the stairs, substeps so a long
+  fall can't tunnel, and moving floors that carry you. Fall out of the
+  castle and Nakime drops you into a room somewhere else.
+- **Rendering**: each room or passage is one merged mesh. Its vertices carry
+  a material id and a moving part (door, rail gate, trapdoor) that the vertex
+  shader slides, so doors move without separate meshes. One uber-shader
+  paints wood, tatami, shoji, fusuma (gold clouds, seigaiha, crimson), roof
+  tiles, chōchin lanterns and the Upper Moons' rooms procedurally, lit by
+  the block's own lanterns. Beyond reach, ~3,700 instanced rooms (some
+  upside down or on their side) step to new places on every strum. Post:
+  bloom, then a pass for the strum's shockwave, colour fringing, teal/amber
+  grading, vignette and grain. Resolution adapts to hold the frame rate.
+- **Goal**: Tanjiro's nose (an arrow round the crosshair) points to the
+  nearest Upper Moon's room. Find Kokushibo's moon hall, Doma's lotus pond
+  and Akaza's ring and Nakime's chamber unseals; reach her and the castle is
+  dragged up into the dawn.
+- **Sound** is synthesised: a Karplus–Strong biwa with a buzzing attack, a
+  long echo, sliding fusuma, rumbling rooms, steps, wind and Nakime's melody,
+  positioned where she sits.
+- **Controls**: WASD / mouse (pointer lock, or drag where it's refused),
+  Shift, Space, F. On touch: a floating joystick on the left (push far to
+  run), drag on the right to look, tap to jump. Esc or losing focus pauses.
 
 ### The journey (`/journey`)
 
