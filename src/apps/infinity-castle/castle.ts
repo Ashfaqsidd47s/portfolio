@@ -22,6 +22,10 @@ import { TURNED, sideFacing } from "./orient"
  * of the maze: a spur (a bridge) reaches one whenever a hall stands next to
  * it with the stray's door facing that way, and inside it, its floor is
  * the floor. Their nodes and the ones above and below stay empty for good.
+ *
+ * Lines are rows of nodes kept clear for the castle's long train paths
+ * (see `lines.ts`): no room is built in them or slides into or across
+ * them, and a dock (a bridge) reaches the line from any room beside it.
  */
 
 /** Metres between neighbouring room centres. */
@@ -52,7 +56,11 @@ export type Landmark = "kokushibo" | "doma" | "akaza"
 export type RoomKind = "hall" | Landmark | "nakime"
 export const LANDMARKS: readonly Landmark[] = ["kokushibo", "doma", "akaza"]
 
-export type Room = { id: number; kind: RoomKind; node: Node; variant: number }
+/** How a plain hall is built: tatami and fusuma, a pavilion of bamboo blinds, or bright shoji. */
+export const HALL_STYLES = ["hall", "sudare", "shoji"] as const
+export type HallStyle = (typeof HALL_STYLES)[number]
+
+export type Room = { id: number; kind: RoomKind; node: Node; variant: number; style: HallStyle }
 
 export type EdgeStyle = "bridge" | "corridor" | "stair"
 export type Edge = {
@@ -75,6 +83,16 @@ export type Stray = { id: number; node: Node; orient: number }
 
 /** A bridge from a hall (`anchor`) to a stray's door, running `dir` from the hall. */
 export type Spur = { key: string; stray: number; anchor: number; dir: Dir; side: number }
+
+/** A bridge from a room to the line beside it, running `dir` from the room, `len` metres. */
+export type Dock = { key: string; anchor: number; dir: Dir; len: number; line: number }
+
+/**
+ * A row of nodes kept clear for a train path: along `axis` (0 = x, 2 = z)
+ * at `level`, through `at` on the other horizontal axis. `half` is the
+ * deck's half-width, kerb included.
+ */
+export type LineRow = { axis: 0 | 2; level: number; at: number; half: number }
 
 export type CastleSize = { x: number; y: number; z: number }
 
@@ -132,10 +150,13 @@ export class Castle {
   /** Her chamber stays sealed until every Upper Moon's room has been found. */
   nakimeOpen = false
   readonly strays: Stray[] = []
+  /** The ring's row (along x) and the z-line's row, if the castle is big enough for them. */
+  readonly rows: LineRow[] = []
   /** The hall the visitor falls into, with nothing above it. */
   readonly landingId: number
-  /** Nodes no room may slide into: strays and the space above and below them. */
+  /** Nodes no room may slide into: strays, the space above and below them, and lines. */
   private reserved = new Set<string>()
+  private lineNodes = new Set<string>()
   /** Nodes kept clear for a while: the column the visitor falls down. */
   readonly hold = new Set<string>()
   private byNode = new Map<string, number>()
@@ -147,8 +168,10 @@ export class Castle {
     this.rng = createRng(seed)
     this.nakimeNode = [Math.floor(size.x / 2), size.y, Math.floor(size.z / 2)]
     this.nakimeId = this.addRoom("nakime", this.nakimeNode).id
+    this.pickRows()
     this.generate()
     this.landingId = this.pickLanding()
+    this.rooms.get(this.landingId)!.style = "hall"
     this.placeStrays(5)
   }
 
@@ -250,10 +273,66 @@ export class Castle {
     return out
   }
 
+  /** Every room standing beside a line, with the bridge it gets to the deck. */
+  docks(): Dock[] {
+    const out: Dock[] = []
+    this.rows.forEach((row, line) => {
+      const count = row.axis === 0 ? this.size.x : this.size.z
+      for (let i = 0; i < count; i++) {
+        const on: Node = row.axis === 0 ? [i, row.level, row.at] : [row.at, row.level, i]
+        for (const s of [-1, 1]) {
+          const n: Node = row.axis === 0 ? [i, row.level, row.at + s] : [row.at + s, row.level, i]
+          const room = this.roomAt(n)
+          if (!room || room.kind === "nakime") continue
+          const dir = sideTowards(n, on)!
+          out.push({ key: `${room.id}>${line}:${i}:${dir}`, anchor: room.id, dir, len: CELL - ROOM_R - row.half, line })
+        }
+      }
+    })
+    return out
+  }
+
+  /** On a line's row, or in it, or crossing it on the way somewhere. */
+  isLine(n: Node) {
+    return this.lineNodes.has(nodeKey(n))
+  }
+
+  /** Would a room sliding straight from one node to another pass through a line? */
+  crossesLine(from: Node, to: Node) {
+    for (let i = 1; i < 12; i++) {
+      const t = i / 12
+      const p: Node = [0, 1, 2].map((k) => Math.round(from[k] + (to[k] - from[k]) * t)) as Node
+      if (this.isLine(p)) return true
+    }
+    return false
+  }
+
   // ── Building ───────────────────────────────────────────────────────────
 
+  /**
+   * The ring's row runs along x, off the middle, low enough to pass under
+   * Nakime's feet; the z-line's row crosses it a level or more away.
+   */
+  private pickRows() {
+    const { x, y, z } = this.size
+    if (x < 4 || z < 4 || y < 5) return
+    const ring: LineRow = { axis: 0, level: this.rng.pick([2, 3]), at: this.rng.pick([1, z - 2]), half: 5.62 }
+    const cross: LineRow = { axis: 2, level: this.rng.pick([1, 4]), at: this.rng.pick([1, x - 2]), half: 3.52 }
+    for (const row of [ring, cross]) {
+      this.rows.push(row)
+      const count = row.axis === 0 ? x : z
+      for (let i = 0; i < count; i++) {
+        const n: Node = row.axis === 0 ? [i, row.level, row.at] : [row.at, row.level, i]
+        this.reserved.add(nodeKey(n))
+        this.lineNodes.add(nodeKey(n))
+      }
+    }
+  }
+
   private addRoom(kind: RoomKind, node: Node) {
-    const room: Room = { id: this.nextId++, kind, node, variant: this.rng.next() }
+    const roll = this.rng.next()
+    const style: HallStyle = kind !== "hall" || roll < 0.5 ? "hall" : roll < 0.75 ? "sudare" : "shoji"
+    const room: Room = { id: this.nextId++, kind, node, variant: this.rng.next(), style }
     this.rooms.set(room.id, room)
     this.byNode.set(nodeKey(node), room.id)
     return room
@@ -287,7 +366,7 @@ export class Castle {
     for (let attempt = 0; placed.length < target && attempt < 20000; attempt++) {
       const from = this.rng.pick(placed)
       const n = this.rng.pick(this.candidateNeighbours(from.node))
-      if (!this.inBounds(n) || this.roomAt(n)) continue
+      if (!this.inBounds(n) || this.roomAt(n) || this.reserved.has(nodeKey(n))) continue
       const room = this.addRoom("hall", n)
       const edge = this.makeEdge(from, room)!
       this.edges.set(edge.key, edge)
@@ -336,6 +415,8 @@ export class Castle {
     const [nx, , nz] = this.nakimeNode
     const clear = (r: Room) => {
       if (r.node[0] === nx && r.node[2] === nz) return false
+      // The fall in mustn't come down through a line's deck.
+      if (this.rows.some((row) => r.node[row.axis === 0 ? 2 : 0] === row.at)) return false
       for (let k = r.node[1] + 1; k < this.size.y; k++) if (this.roomAt([r.node[0], k, r.node[2]])) return false
       return true
     }
@@ -407,7 +488,7 @@ export class Castle {
     return seen.size === rooms.length
   }
 
-  private touchesMaze(n: Node, self: Room) {
+  private touchesMaze(n: Node, self?: Room) {
     return this.candidateNeighbours(n).some((m) => {
       const q = this.roomAt(m)
       return q && q !== self && (q.kind !== "nakime" || this.nakimeOpen)
@@ -457,6 +538,7 @@ export class Castle {
           !this.reserved.has(nodeKey(n)) &&
           !this.hold.has(nodeKey(n)) &&
           this.touchesMaze(n, room) &&
+          !this.crossesLine(from, n) &&
           !blocked(from, n)
       )
       this.byNode.set(nodeKey(from), room.id)
@@ -508,6 +590,37 @@ export class Castle {
     this.edges.clear()
     for (const [k, e] of next) this.edges.set(k, e)
     return { moves, removed, added, turned }
+  }
+
+  /**
+   * A new hall in a free node by the maze, nearest `near` (in metres), with
+   * a passage or two into it: where Nakime sets down a room she caught
+   * someone in. Null if there's nowhere to put one.
+   */
+  adopt(near: Vec3): { room: Room; edges: Edge[] } | null {
+    const free = this.allNodes().filter(
+      (n) => !this.roomAt(n) && !this.reserved.has(nodeKey(n)) && !this.hold.has(nodeKey(n)) && this.touchesMaze(n)
+    )
+    if (!free.length) return null
+    const dist = (n: Node) => {
+      const c = nodeCenter(n)
+      return Math.hypot(c[0] - near[0], c[1] - near[1], c[2] - near[2])
+    }
+    const node = free.reduce((best, n) => (dist(n) < dist(best) ? n : best))
+    const room = this.addRoom("hall", node)
+    room.style = "hall"
+    const neighbours = this.candidateNeighbours(node)
+      .map((m) => this.roomAt(m))
+      .filter((q): q is Room => !!q && q !== room && (q.kind !== "nakime" || this.nakimeOpen))
+      // Level ones first: a bridge rather than a stair, where there's a choice.
+      .sort((a, b) => Math.abs(a.node[1] - node[1]) - Math.abs(b.node[1] - node[1]) + (this.rng.next() - 0.5) * 0.5)
+    const edges: Edge[] = []
+    for (const q of neighbours.slice(0, this.rng.chance(0.5) ? 2 : 1)) {
+      const e = this.makeEdge(room, q)!
+      this.edges.set(e.key, e)
+      edges.push(e)
+    }
+    return { room, edges }
   }
 
   /**

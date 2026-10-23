@@ -302,6 +302,24 @@ Surface surface(int mat, vec2 uv, vec3 local, vec3 n) {
     s.albedo = mix(vec3(0.16, 0.22, 0.28), vec3(0.36, 0.44, 0.5), f);
     s.emit = vec3(0.08, 0.2, 0.32) * (0.2 + 0.4 * f);
     s.spec = 0.5; s.shine = 70.0;
+  } else if (mat == 21) {
+    // Sudare: a blind of split bamboo, lamplight glowing between the reeds.
+    float rv = uv.y / 0.04;
+    float reed = fract(rv);
+    // Fades to the blind's average tone where the reeds get finer than a pixel.
+    float fine = clamp(fwidth(rv) * 1.6 - 0.3, 0.0, 1.0);
+    float gap = mix(smoothstep(0.7, 0.8, reed) * (1.0 - smoothstep(0.9, 1.0, reed)), 0.16, fine);
+    float knot = gridLine(uv.x / 0.9 + hash11(floor(rv)) * 0.3, 0.02) * (1.0 - fine);
+    float cord = gridLine(uv.x / 0.6 - 0.5, 0.012);
+    vec3 cane = mix(vec3(0.3, 0.2, 0.08), vec3(0.44, 0.32, 0.13), mix(vnoise(vec2(uv.x * 3.0, floor(rv))), 0.5, fine));
+    s.albedo = mix(cane * (1.0 - knot * 0.35), vec3(0.03, 0.015, 0.01), gap);
+    s.albedo = mix(s.albedo, vec3(0.32, 0.04, 0.03), cord);
+    s.emit = vec3(1.0, 0.55, 0.22) * gap * 0.35 * uGlow;
+    s.spec = 0.25; s.shine = 24.0;
+  } else if (mat == 22) {
+    // Iron rails: dark, worn bright on top.
+    s.albedo = mix(vec3(0.05, 0.05, 0.055), vec3(0.3, 0.28, 0.26), step(0.5, n.y) * (0.6 + 0.4 * vnoise(uv * 20.0)));
+    s.spec = 1.0; s.shine = 60.0;
   } else {
     // The moon in Upper One's hall.
     float craters = fbm(uv * vec2(8.0, 4.0));

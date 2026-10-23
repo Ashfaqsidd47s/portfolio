@@ -214,3 +214,23 @@ export function depenetrate(body: Body, boxes: readonly Box[]) {
     if (!moved) return
   }
 }
+
+/**
+ * Lifts the body onto any floor that has slid under its feet by no more
+ * than a step: a car gliding along its deck scoops you up rather than
+ * shoving you along in front of it.
+ */
+export function liftOnto(body: Body, boxes: readonly Box[]) {
+  const half = halfExtents(body.up)
+  const { axis: u, sign } = body.up
+  for (const b of boxes) {
+    if (!overlaps(body.pos, half, b)) continue
+    const rise = riseOver(body, half, b)
+    if (rise <= 0 || rise > BODY.step + 0.05) continue
+    const lifted: Vec3 = [...body.pos]
+    lifted[u] += sign * (rise + 0.01)
+    if (blocked(lifted, half, boxes)) continue
+    body.pos[u] = lifted[u]
+    if (sign * body.vel[u] < 0) body.vel[u] = 0
+  }
+}

@@ -8,8 +8,10 @@ import {
   STAIR_LANE,
   nodeCenter,
   opposite,
+  type Dock,
   type Edge,
   type EdgeStyle,
+  type HallStyle,
   type Room,
   type RoomKind,
   type ShiftPlan,
@@ -17,10 +19,27 @@ import {
   type Stray,
   type Vec3,
 } from "./castle"
-import { TURNED, apply, orientBox, sideVector, unapply, type Mat3 } from "./orient"
-import type { Box } from "./physics"
+import {
+  buildNetwork,
+  carAt,
+  carOrient,
+  carSeat,
+  linePoint,
+  segments,
+  SEGMENT,
+  type CarKind,
+  type CarSpec,
+  type DeckKind,
+  type HallKind,
+  type HallSpec,
+  type Lane,
+  type LineSpec,
+  type Network,
+} from "./lines"
+import { TURNED, apply, orientBox, sameUp, sideVector, unapply, upOf, type Mat3 } from "./orient"
+import type { Body, Box, Up } from "./physics"
 import { turn } from "./render/builder"
-import { DOOR_H, DOOR_W, PART_COUNT, TRAP_PART, WALL, WALL_H, doorPart, gatePart, type Template } from "./render/kit"
+import { DOOR_H, DOOR_W, PART_COUNT, ROOF_PART, TRAP_PART, WALL, WALL_H, doorPart, gatePart, type Template } from "./render/kit"
 
 /**
  * The castle in motion. Each room and passage is a block with a live
@@ -30,10 +49,16 @@ import { DOOR_H, DOOR_W, PART_COUNT, TRAP_PART, WALL, WALL_H, doorPart, gatePart
  * them, so what you see is what you stand on.
  *
  * Strays (rooms turned over) are blocks with an orientation; a spur is a
- * bridge stretched from a hall to a stray's door.
+ * bridge stretched from a hall to a stray's door, and a dock one from a
+ * room to a line's deck.
+ *
+ * The lines (see `lines.ts`) are blocks too: deck segments and great halls
+ * that stay put, and cars that slide along their decks all the time.
+ * Everything with an orientation pulls toward its own floor: `zoneOf`
+ * says which way is up for whatever a collision box belongs to.
  */
 
-export type TemplateKey = RoomKind | EdgeStyle
+export type TemplateKey = RoomKind | EdgeStyle | HallStyle | DeckKind | CarKind | HallKind
 
 export type Block = {
   key: string
@@ -55,11 +80,23 @@ export type Block = {
   stretch: number
   stray?: Stray
   spur?: Spur
+  dock?: Dock
+  /** A segment of a line's deck. */
+  line?: LineSpec
+  /** A building riding a line. */
+  car?: { line: LineSpec; lane: Lane; spec: CarSpec }
+  great?: HallSpec
+  /** The room Nakime sends up to catch a fall, until it joins the castle. */
+  catcher?: boolean
+  /** How far from its centre a block's boxes reach (for gathering them). */
+  reach: number
   /** 0–1: a passage unfolds out of its lower room. */
   extend: number
   open: Float32Array
   /** Fades out, then is removed. */
   dying: boolean
+  /** How far the finale has lifted a fixed block so far. */
+  lifted?: number
   /** Variety for the shader: fusuma painting, lantern colour. */
   seed: number
 }
@@ -127,6 +164,17 @@ export function strayOffset(m: Mat3): Vec3 {
 }
 
 const plus = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+
+export const UPRIGHT: Up = { axis: 1, sign: 1 }
+
+/** Plain halls are built in a style; other rooms by their kind. */
+export const roomTemplate = (room: Room): TemplateKey => (room.kind === "hall" ? room.style : room.kind)
+
+/** How close (centre to surface) another building's floor must be to take you, walking into it. */
+const CAPTURE = 1.05
+/** The catching room's physics owner, until it joins the castle. */
+export const CATCHER_OWNER = 90000
+
 export class World {
   readonly castle: Castle
   readonly blocks = new Map<string, Block>()
@@ -134,15 +182,101 @@ export class World {
   private tweens: Tween[] = []
   private clock = 0
   private nextEdgeOwner = 100000
+  readonly network: Network
+  /** Which way is up for each owner's boxes; null for strays (their doors decide). */
+  private zones = new Map<number, Up | null>()
+  /** Velocity of the room sent up to catch a fall. */
+  catcherVel: Vec3 = [0, 0, 0]
+  /** The finale drags the lines up with everything else, from this time. */
+  private liftFrom = Infinity
 
   constructor(castle: Castle, templates: Map<TemplateKey, Template>) {
     this.castle = castle
     this.templates = templates
+    this.network = buildNetwork(castle)
     for (const room of castle.rooms.values()) this.addRoom(room)
     for (const edge of castle.edges.values()) this.addEdge(edge, 1)
     for (const stray of castle.strays) this.addStray(stray)
     for (const spur of castle.spurs()) this.addSpur(spur, 1)
+    for (const dock of castle.docks()) this.addDock(dock, 1)
+    this.addNetwork()
     this.settleOpenings()
+  }
+
+  private put(block: Block, up: Up | null) {
+    this.blocks.set(block.key, block)
+    this.zones.set(block.owner, up)
+    return block
+  }
+
+  /** Which way is up for whatever owns a box: rooms and passages are upright, lines and cars their own way. */
+  zoneOf(owner: number): Up | null | undefined {
+    return this.zones.get(owner)
+  }
+
+  private addNetwork() {
+    const base = (key: string, template: TemplateKey, pos: Vec3, orient: Mat3, reach: number): Block => ({
+      key,
+      owner: this.nextEdgeOwner++,
+      template,
+      pos,
+      q: 0,
+      orient,
+      extend: 1,
+      open: new Float32Array(PART_COUNT),
+      dying: false,
+      seed: (this.nextEdgeOwner * 0.618) % 1,
+      turnT: 1,
+      stretch: 1,
+      reach,
+    })
+    for (const line of this.network.lines) {
+      const { count, stretch } = segments(line)
+      for (let i = 0; i < count; i++) {
+        const s = (i + 0.5) * SEGMENT * stretch
+        const block = base(`l${line.key}:${i}`, line.deck, linePoint(line, s, 0, 0), line.orient, 16)
+        block.stretch = stretch
+        block.line = line
+        this.put(block, upOf(line.orient))
+      }
+      line.lanes.forEach((lane, li) => {
+        lane.cars.forEach((spec, ci) => {
+          const block = base(`c${line.key}:${li}:${ci}`, spec.kind, [0, 0, 0], carOrient(line, spec), 12)
+          block.car = { line, lane, spec }
+          this.put(block, upOf(block.orient!))
+        })
+      })
+    }
+    for (const hall of this.network.halls) {
+      const block = base(`g${hall.key}`, hall.kind, hall.pos, hall.orient, 34)
+      block.great = hall
+      this.put(block, upOf(hall.orient))
+    }
+    this.moveCars()
+  }
+
+  /** Every car to where its schedule has it now. */
+  private moveCars() {
+    const lift = this.clock > this.liftFrom ? ((this.clock - this.liftFrom) / 5) ** 2 * 400 : 0
+    for (const block of this.blocks.values()) {
+      if (block.line || block.great) {
+        if (lift) block.pos = [block.pos[0], block.pos[1] + lift - (block.lifted ?? 0), block.pos[2]]
+        block.lifted = lift
+        continue
+      }
+      if (!block.car) continue
+      const { line, lane, spec } = block.car
+      const at = carAt(line, lane, spec, this.clock)
+      const seat = carSeat(spec, lane)
+      const p = linePoint(line, at.s, seat.across, seat.up)
+      block.pos = [p[0], p[1] + lift, p[2]]
+      block.extend = at.extend
+    }
+  }
+
+  /** The finale: the lines and their halls rise with the castle. */
+  liftLines(at: number) {
+    this.liftFrom = this.clock + at
   }
 
   get time() {
@@ -161,7 +295,7 @@ export class World {
     const block: Block = {
       key: `r${room.id}`,
       owner: room.id,
-      template: room.kind,
+      template: roomTemplate(room),
       room,
       pos: nodeCenter(room.node),
       q: 0,
@@ -171,8 +305,9 @@ export class World {
       seed: room.variant,
       turnT: 1,
       stretch: 1,
+      reach: 16,
     }
-    this.blocks.set(block.key, block)
+    this.put(block, UPRIGHT)
   }
 
   private addStray(stray: Stray) {
@@ -191,8 +326,9 @@ export class World {
       seed: (stray.id * 0.377) % 1,
       turnT: 1,
       stretch: 1,
+      reach: 16,
     }
-    this.blocks.set(block.key, block)
+    this.put(block, null)
   }
 
   private addSpur(spur: Spur, extend: number) {
@@ -210,9 +346,29 @@ export class World {
       seed: (this.nextEdgeOwner * 0.618) % 1,
       turnT: 1,
       stretch: SPUR_STRETCH,
+      reach: 16,
     }
-    this.blocks.set(block.key, block)
-    return block
+    return this.put(block, UPRIGHT)
+  }
+
+  private addDock(dock: Dock, extend: number) {
+    const anchor = this.castle.rooms.get(dock.anchor)!
+    const block: Block = {
+      key: `d${dock.key}`,
+      owner: this.nextEdgeOwner++,
+      template: "bridge",
+      dock,
+      pos: edgeOrigin(anchor, dock.dir),
+      q: dock.dir,
+      extend,
+      open: new Float32Array(PART_COUNT),
+      dying: false,
+      seed: (this.nextEdgeOwner * 0.618) % 1,
+      turnT: 1,
+      stretch: dock.len / SPAN,
+      reach: 16,
+    }
+    return this.put(block, UPRIGHT)
   }
 
   private addEdge(edge: Edge, extend: number) {
@@ -230,9 +386,9 @@ export class World {
       seed: (this.nextEdgeOwner * 0.618) % 1,
       turnT: 1,
       stretch: 1,
+      reach: 16,
     }
-    this.blocks.set(block.key, block)
-    return block
+    return this.put(block, UPRIGHT)
   }
 
   /** Rooms and strays: everything with doors. */
@@ -242,8 +398,13 @@ export class World {
   }
 
   /** What a room's (or stray's) doors and gates should be, given its passages. */
-  private wanted(block: Block, spurs = this.castle.spurs()) {
+  private wanted(block: Block, spurs = this.castle.spurs(), docks = this.castle.docks()) {
     const open = new Float32Array(PART_COUNT)
+    for (const d of docks) {
+      if (d.anchor !== block.room?.id) continue
+      open[doorPart(d.dir)] = 1
+      open[gatePart(d.dir, 1)] = 1
+    }
     if (block.room) {
       for (const e of this.castle.edgesOf(block.room.id)) {
         for (const l of landings(e)) {
@@ -294,6 +455,12 @@ export class World {
     this.tween({ block, prop: "extend", from: block.extend, to: 0, at, dur: 0.5, ease: easeIn, done: () => this.blocks.delete(block.key) })
   }
 
+  /** Opens whatever doors and gates a room's passages, bridges and docks want. */
+  reopen(block: Block, at: number) {
+    const want = this.wanted(block)
+    for (let p = 1; p < TRAP_PART; p++) if (want[p] > 0.5) this.setPart(block, p, 1, at, 0.3)
+  }
+
   /** Drops any pending motion of one part (a turned room keeps its doors shut). */
   cancel(block: Block, part: number) {
     this.tweens = this.tweens.filter((t) => t.block !== block || t.prop !== part)
@@ -310,9 +477,10 @@ export class World {
     let end = 1
 
     const spurs = this.castle.spurs()
-    const keep = new Set(spurs.map((s) => `s${s.key}`))
+    const docks = this.castle.docks()
+    const keep = new Set([...spurs.map((s) => `s${s.key}`), ...docks.map((d) => `d${d.key}`)])
     const gone = [...plan.removed.map((e) => this.blocks.get(`e${e.key}`))]
-    for (const block of this.blocks.values()) if (block.spur && !block.dying && !keep.has(block.key)) gone.push(block)
+    for (const block of this.blocks.values()) if ((block.spur || block.dock) && !block.dying && !keep.has(block.key)) gone.push(block)
     for (const block of gone) {
       if (!block) continue
       block.dying = true
@@ -324,7 +492,7 @@ export class World {
     // to turn over shuts every door.
     const turning = new Set(plan.turned.map((t) => t.id))
     for (const block of this.doorBlocks()) {
-      const want = block.stray && turning.has(block.stray.id) ? new Float32Array(PART_COUNT) : this.wanted(block, spurs)
+      const want = block.stray && turning.has(block.stray.id) ? new Float32Array(PART_COUNT) : this.wanted(block, spurs, docks)
       for (let p = 1; p < TRAP_PART; p++) {
         if (want[p] < 0.5 && block.open[p] > 0.5) this.setPart(block, p, 0, 0.05 + rnd() * 0.25, 0.16, easeIn)
       }
@@ -368,6 +536,17 @@ export class World {
       this.setPart(anchor, gatePart(s.dir, 1), 1, start - 0.15, 0.3)
       this.setPart(stray, doorPart(s.side), 1, start + 0.3, 0.3)
       this.setPart(stray, gatePart(s.side, 1), 1, start + 0.35, 0.3)
+      end = Math.max(end, start + 0.65)
+    }
+
+    for (const d of docks) {
+      if (this.blocks.has(`d${d.key}`)) continue
+      const start = (arrive.get(d.anchor) ?? 0.95) + 0.1
+      const block = this.addDock(d, 0)
+      this.tween({ block, prop: "extend", from: 0, to: 1, at: start, dur: 0.6, ease: easeOutBack })
+      const anchor = this.roomBlock(d.anchor)!
+      this.setPart(anchor, doorPart(d.dir), 1, start - 0.2, 0.3)
+      this.setPart(anchor, gatePart(d.dir, 1), 1, start - 0.15, 0.3)
       end = Math.max(end, start + 0.65)
     }
 
@@ -430,6 +609,104 @@ export class World {
       this.tweens = this.tweens.filter((t) => !finished.includes(t))
       for (const t of finished) t.done?.()
     }
+    this.moveCars()
+    const c = this.blocks.get("catcher")
+    if (c) {
+      const v = this.catcherVel
+      c.pos = [c.pos[0] + v[0] * dt, c.pos[1] + v[1] * dt, c.pos[2] + v[2] * dt]
+    }
+  }
+
+  // ── The catch ──────────────────────────────────────────────────────────
+
+  /** A hall flies up out of the dark under someone falling: roof open, doors shut. */
+  spawnCatcher(pos: Vec3) {
+    this.removeCatcher()
+    const block: Block = {
+      key: "catcher",
+      owner: CATCHER_OWNER,
+      template: "hall",
+      pos,
+      q: 0,
+      extend: 1,
+      open: new Float32Array(PART_COUNT),
+      dying: false,
+      seed: Math.random(),
+      turnT: 1,
+      stretch: 1,
+      reach: 16,
+      catcher: true,
+    }
+    block.open[ROOF_PART] = 1
+    this.catcherVel = [0, 0, 0]
+    return this.put(block, UPRIGHT)
+  }
+
+  removeCatcher() {
+    const c = this.blocks.get("catcher")
+    if (!c) return
+    this.blocks.delete("catcher")
+    this.zones.delete(c.owner)
+    this.tweens = this.tweens.filter((t) => t.block !== c)
+  }
+
+  /** The catcher becomes a room of the castle (the castle has already placed it). */
+  adoptCatcher(room: Room) {
+    const block = this.blocks.get("catcher")!
+    this.blocks.delete("catcher")
+    this.zones.delete(block.owner)
+    room.variant = block.seed
+    block.key = `r${room.id}`
+    block.owner = room.id
+    block.room = room
+    block.catcher = false
+    this.catcherVel = [0, 0, 0]
+    return this.put(block, UPRIGHT)
+  }
+
+  /** Nothing solid in a column below a point for `dist` metres (world down). */
+  clearBelow(p: Vec3, dist: number) {
+    const boxes = this.collect([p[0], p[1] - dist / 2, p[2]], dist / 2 + 2, [])
+    return !boxes.some(
+      (b) =>
+        b.min[0] < p[0] + 1.5 &&
+        b.max[0] > p[0] - 1.5 &&
+        b.min[2] < p[2] + 1.5 &&
+        b.max[2] > p[2] - 1.5 &&
+        b.max[1] < p[1] &&
+        b.max[1] > p[1] - dist
+    )
+  }
+
+  /**
+   * Another building's floor the body is walking (or jumping, or falling)
+   * into: within reach of its centre and coming closer. That building's
+   * gravity takes over — the wall you walk into becomes the floor.
+   */
+  floorAhead(body: Body, boxes: readonly Box[]): Up | null {
+    let best: { up: Up; d: number } | null = null
+    for (const b of boxes) {
+      const up = this.zones.get(b.owner)
+      if (!up || sameUp(up, body.up)) continue
+      const { axis, sign } = up
+      const face = sign > 0 ? b.max[axis] : b.min[axis]
+      const d = sign * (body.pos[axis] - face)
+      if (d <= 0 || d > CAPTURE || sign * body.vel[axis] > -0.5) continue
+      let over = true
+      for (let k = 0; k < 3; k++) {
+        if (k === axis) continue
+        if (body.pos[k] < b.min[k] - 0.1 || body.pos[k] > b.max[k] + 0.1) over = false
+      }
+      if (over && (!best || d < best.d)) best = { up, d }
+    }
+    return best?.up ?? null
+  }
+
+  /** What kind of thing an owner is: for telling the visitor where they've got to. */
+  kindOf(owner: number): "line" | "car" | "great" | "room" | "other" {
+    const b = this.blockByOwner(owner)
+    if (!b) return "other"
+    return b.line ? "line" : b.car ? "car" : b.great ? "great" : b.room ? "room" : "other"
   }
 
   get busy() {
@@ -443,14 +720,15 @@ export class World {
     out.length = 0
     for (const block of this.blocks.values()) {
       if (block.dying || block.extend < 0.999 || block.turnT < 1) continue
-      const reach = radius + 16
+      const reach = radius + block.reach
       const c = this.blockCentre(block)
       if (Math.abs(c[0] - p[0]) > reach || Math.abs(c[1] - p[1]) > reach || Math.abs(c[2] - p[2]) > reach) continue
       const tpl = this.templates.get(block.template)!
       for (const b of tpl.boxes) {
         if (b.part && block.open[b.part] >= 0.5) continue
         if (block.orient) {
-          const o = orientBox(block.orient, b.min, b.max)
+          const k = block.stretch
+          const o = orientBox(block.orient, [b.min[0] * k, b.min[1], b.min[2]], [b.max[0] * k, b.max[1], b.max[2]])
           out.push({ min: plus(o.min, block.pos), max: plus(o.max, block.pos), owner: block.owner })
           continue
         }
@@ -468,7 +746,7 @@ export class World {
   }
 
   blockCentre(block: Block): Vec3 {
-    if (block.room || block.stray) return block.pos
+    if (block.room || block.stray || block.orient || block.catcher) return block.pos
     const [x, z] = turn(block.q, 6.2 * block.stretch, 0)
     return [block.pos[0] + x, block.pos[1] + LEVEL / 2, block.pos[2] + z]
   }
@@ -529,6 +807,17 @@ export class World {
       if (block.stray) {
         const d = Math.max(...[0, 1, 2].map((i) => Math.abs(p[i] - block.pos[i])))
         if (d < 9 + margin) keepStray(block.stray.id)
+        continue
+      }
+      if (block.dock) {
+        const [dx, dz] = DIRS[block.q]
+        const rel = [p[0] - block.pos[0], p[2] - block.pos[2]]
+        const along = rel[0] * dx + rel[1] * dz
+        const across = Math.abs(rel[0] * -dz + rel[1] * dx)
+        const dy = p[1] - block.pos[1]
+        if (along > -margin && along < block.dock.len + margin && across < 2 + margin && dy > -3 - margin && dy < 4 + margin) {
+          rooms.add(block.dock.anchor)
+        }
         continue
       }
       if (block.spur) {

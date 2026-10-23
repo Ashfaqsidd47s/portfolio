@@ -2,7 +2,8 @@ import type { Controls } from "./game"
 
 /**
  * Desktop: WASD / arrows, Shift to run, Space to jump, F to provoke the
- * biwa, the mouse to look (pointer lock, or drag where lock isn't allowed).
+ * biwa, B / N / M to mute the biwa, the music or everything, the mouse to
+ * look (pointer lock, or drag where lock isn't allowed).
  *
  * Touch: the left part of the screen is a floating joystick (push it far to
  * run), the right part drags the view, and a quick tap there jumps.
@@ -16,7 +17,12 @@ const KEYS = {
   run: ["ShiftLeft", "ShiftRight"],
   jump: ["Space"],
   strum: ["KeyF"],
+  biwa: ["KeyB"],
+  music: ["KeyN"],
+  mute: ["KeyM"],
 }
+
+export type SoundKey = "biwa" | "music" | "mute"
 const HANDLED = new Set(Object.values(KEYS).flat())
 
 export type InputOptions = {
@@ -24,6 +30,8 @@ export type InputOptions = {
   /** The input is live: playing, focused, not paused. */
   active: () => boolean
   onStrum: () => void
+  /** A sound toggle was pressed. */
+  onSound?: (key: SoundKey) => void
   /** Joystick state, for drawing it. */
   onStick?: (stick: { x: number; y: number; dx: number; dy: number } | null) => void
   mouseSpeed?: number
@@ -45,6 +53,7 @@ export function bindKeyboard(opts: InputOptions) {
     e.stopPropagation()
     if (KEYS.jump.includes(e.code) && !e.repeat) opts.controls.jump = true
     if (KEYS.strum.includes(e.code) && !e.repeat) opts.onStrum()
+    if (!e.repeat) for (const k of ["biwa", "music", "mute"] as const) if (KEYS[k].includes(e.code)) opts.onSound?.(k)
     held.add(e.code)
     apply()
   }
