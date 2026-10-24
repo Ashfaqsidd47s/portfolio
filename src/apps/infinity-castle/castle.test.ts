@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { Castle, LANDMARKS, nodeKey } from "./castle"
+import { Castle, DIRS, LANDMARKS, nodeKey, type Node } from "./castle"
+import { TURNED, apply, sideVector } from "./orient"
 
 describe("Castle", () => {
   it("builds a connected maze with all three Upper Moon rooms", () => {
@@ -44,7 +45,7 @@ describe("Castle", () => {
 
   it("never moves a locked room or drops a locked passage", () => {
     const castle = new Castle(11)
-    const here = castle.entryRoom()
+    const here = castle.landingId
     const passage = castle.edgesOf(here)[0]
     for (let i = 0; i < 30; i++) {
       const before = [...castle.rooms.get(here)!.node]
@@ -77,53 +78,120 @@ describe("Castle", () => {
       castle.shift({ count: 4 })
       expect(castle.edgesOf(castle.nakimeId).length).toBeGreaterThan(0)
       expect(castle.isConnected()).toBe(true)
-      expect(castle.hops(castle.entryRoom(), castle.nakimeId)).toBeGreaterThan(0)
+      expect(castle.hops(castle.landingId, castle.nakimeId)).toBeGreaterThan(0)
     }
   })
 
-  it("drops the visitor from a room with something below it", () => {
-    for (let seed = 1; seed <= 10; seed++) {
+  it("drops the visitor into a hall with nothing above it", () => {
+    for (let seed = 1; seed <= 20; seed++) {
       const castle = new Castle(seed)
-      const entry = castle.rooms.get(castle.entryRoom())!
-      expect(entry.kind).toBe("hall")
-      const below = [...castle.rooms.values()].some(
-        (r) => r.node[0] === entry.node[0] && r.node[2] === entry.node[2] && r.node[1] < entry.node[1]
-      )
-      expect(below).toBe(true)
+      const land = castle.rooms.get(castle.landingId)!
+      expect(land.kind).toBe("hall")
+      for (const n of castle.landingColumn()) expect(castle.roomAt(n)).toBeUndefined()
     }
   })
 
-  it("has open-air terraces among its rooms", () => {
-    for (let seed = 1; seed <= 10; seed++) {
-      const castle = new Castle(seed)
-      expect([...castle.rooms.values()].some((r) => r.kind === "terrace")).toBe(true)
+  it("keeps held nodes clear through strums", () => {
+    const castle = new Castle(4)
+    for (const n of castle.landingColumn()) castle.hold.add(nodeKey(n))
+    for (let i = 0; i < 40; i++) {
+      castle.shift({ lockedRooms: new Set([castle.landingId]), count: 6 })
+      for (const n of castle.landingColumn()) expect(castle.roomAt(n)).toBeUndefined()
     }
+  })
+
+  it("sets turned-over rooms in empty nodes, with empty nodes above and below, for good", () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const castle = new Castle(seed)
+      expect(castle.strays.length).toBeGreaterThan(2)
+      const check = () => {
+        for (const s of castle.strays) {
+          expect(TURNED[s.orient][4]).not.toBe(1)
+          for (const dk of [-1, 0, 1]) {
+            const n: Node = [s.node[0], s.node[1] + dk, s.node[2]]
+            expect(castle.roomAt(n)).toBeUndefined()
+            expect(castle.isReserved(n)).toBe(true)
+          }
+        }
+      }
+      check()
+      for (let i = 0; i < 25; i++) {
+        castle.shift({ count: 6 })
+        check()
+        expect(castle.isConnected()).toBe(true)
+      }
+    }
+  })
+
+  it("bridges a stray only from a hall beside it, to a door that faces the hall", () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const castle = new Castle(seed)
+      // Each stray starts within reach, where there's a hall beside it.
+      expect(new Set(castle.spurs().map((s) => s.stray)).size).toBeGreaterThan(2)
+      for (let i = 0; i < 10; i++) {
+        for (const spur of castle.spurs()) {
+          const stray = castle.strays.find((s) => s.id === spur.stray)!
+          const anchor = castle.rooms.get(spur.anchor)!
+          const [dx, dz] = DIRS[spur.dir]
+          expect(anchor.kind).toBe("hall")
+          expect(anchor.node).toEqual([stray.node[0] - dx, stray.node[1], stray.node[2] - dz])
+          expect(apply(TURNED[stray.orient], sideVector(spur.side)).map((v) => v + 0)).toEqual([0 - dx, 0, 0 - dz])
+          // The hall has no passage of its own on that side.
+          for (const e of castle.edgesOf(anchor.id)) {
+            const side = e.a === anchor.id ? e.dir : (e.dir + 2) % 4
+            expect(side).not.toBe(spur.dir)
+          }
+        }
+        castle.shift({ count: 5 })
+      }
+    }
+  })
+
+  it("leaves a locked stray as it is", () => {
+    const castle = new Castle(8)
+    const locked = new Set(castle.strays.map((s) => s.id))
+    const before = castle.strays.map((s) => s.orient)
+    for (let i = 0; i < 20; i++) expect(castle.shift({ lockedStrays: locked }).turned).toHaveLength(0)
+    expect(castle.strays.map((s) => s.orient)).toEqual(before)
   })
 
   it("slides a room it's told to first, even a locked one, and stays connected", () => {
     for (let seed = 1; seed <= 12; seed++) {
       const castle = new Castle(seed)
-      const entry = castle.rooms.get(castle.entryRoom())!
-      const [x, k, z] = entry.node
-      const below = [...castle.rooms.values()].find((r) => r.node[0] === x && r.node[2] === z && r.node[1] < k)!
+      const pairs = [...castle.rooms.values()].flatMap((top) =>
+        [...castle.rooms.values()]
+          .filter((r) => r.node[0] === top.node[0] && r.node[2] === top.node[2] && r.node[1] === top.node[1] - 1)
+          .map((below) => ({ top, below }))
+      )
+      const pair = pairs.find((p) => p.top.kind !== "nakime")
+      if (!pair) continue
+      const { top, below } = pair
+      const [x, k, z] = top.node
       const avoid = (n: [number, number, number]) => (n[0] === x && n[2] === z) || n[1] >= k
-      const plan = castle.shift({ lockedRooms: new Set([entry.id, below.id]), first: [{ id: below.id, avoid }], count: 1 })
+      const plan = castle.shift({ lockedRooms: new Set([top.id, below.id]), first: [{ id: below.id, avoid }], count: 1 })
       expect(castle.isConnected()).toBe(true)
       const move = plan.moves.find((m) => m.id === below.id)
       if (move) expect(avoid(move.to)).toBe(false)
-      expect(castle.rooms.get(entry.id)!.node).toEqual([x, k, z])
+      expect(castle.rooms.get(top.id)!.node).toEqual([x, k, z])
     }
   })
 
   it("brings a room to a given node", () => {
-    const castle = new Castle(4)
-    const room = [...castle.rooms.values()].find((r) => r.kind === "terrace")!
-    const to = castle.inBounds([room.node[0] + 1, room.node[1], room.node[2]])
-      ? ([room.node[0] + 1, room.node[1], room.node[2]] as [number, number, number])
-      : ([room.node[0] - 1, room.node[1], room.node[2]] as [number, number, number])
-    if (castle.roomAt(to)) return
-    const plan = castle.shift({ first: [{ id: room.id, to }], count: 1 })
-    if (plan.moves.length) expect(castle.rooms.get(room.id)!.node).toEqual(to)
-    expect(castle.isConnected()).toBe(true)
+    let moved = 0
+    for (let seed = 1; seed <= 12; seed++) {
+      const castle = new Castle(seed)
+      const room = [...castle.rooms.values()].find((r) => r.kind === "hall" && r.id !== castle.landingId)!
+      const to = ([1, 0, -1] as const)
+        .flatMap((dx) => [1, 0, -1].map((dz) => [room.node[0] + dx, room.node[1], room.node[2] + dz] as [number, number, number]))
+        .find((n) => castle.inBounds(n) && !castle.roomAt(n) && !castle.isReserved(n) && castle.touchesMaze(n, room))
+      if (!to) continue
+      const plan = castle.shift({ first: [{ id: room.id, to }], count: 1 })
+      if (plan.moves.length) {
+        moved++
+        expect(castle.rooms.get(room.id)!.node).toEqual(to)
+      }
+      expect(castle.isConnected()).toBe(true)
+    }
+    expect(moved).toBeGreaterThan(0)
   })
 })

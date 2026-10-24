@@ -1,31 +1,160 @@
 import * as React from "react"
 import { useReducedMotion } from "motion/react"
-import { ArrowUp, Music2, Pause, Volume2, VolumeX } from "lucide-react"
+import { ArrowUp, Drum, Guitar, Music2, Pause, SlidersHorizontal, Volume2, VolumeX } from "lucide-react"
 import "@fontsource/cormorant-garamond/latin-400-italic.css"
 import "@fontsource/cormorant-garamond/latin-500.css"
 import { cn } from "@/lib/utils"
 import type { AppProps } from "@/os/registry/apps"
-import { CastleAudio } from "./audio"
+import { CastleAudio, DEFAULT_MIX, type Mix } from "./audio"
 import { LANDMARK_NAMES, Game, type GameEvent, type Phase, type Stats } from "./game"
-import { bindKeyboard, bindMouse, bindTouch } from "./input"
+import { bindKeyboard, bindMouse, bindTouch, type SoundKey } from "./input"
 import { Output } from "./render/output"
 import { LANDMARKS, type Landmark } from "./castle"
 
 const SERIF = "font-['Cormorant_Garamond',Georgia,serif]"
 const KANJI = "font-['Noto_Serif_JP','Yu_Mincho','Hiragino_Mincho_ProN',serif]"
 const MUTE_KEY = "infinity-castle-muted"
+const MUSIC_KEY = "infinity-castle-music-off"
+const BIWA_KEY = "infinity-castle-biwa-off"
+const VOLUME_KEYS = { volume: "infinity-castle-volume", musicVolume: "infinity-castle-music-volume", biwaVolume: "infinity-castle-biwa-volume" } as const
 
 type Toast = { id: number; title: string; sub?: string }
 
 const chip =
   "pointer-events-auto inline-flex size-9 items-center justify-center rounded-full border border-[#e0a25a]/30 bg-black/40 text-[#f3e3c6]/85 backdrop-blur-sm transition-colors hover:border-[#e0a25a]/70 hover:text-[#f3e3c6] focus-visible:outline-2 focus-visible:outline-[#e0a25a]"
 
-const readMuted = () => {
+const readFlag = (key: string) => {
   try {
-    return window.localStorage.getItem(MUTE_KEY) === "1"
+    return window.localStorage.getItem(key) === "1"
   } catch {
     return false
   }
+}
+
+const writeFlag = (key: string, on: boolean) => {
+  try {
+    window.localStorage.setItem(key, on ? "1" : "0")
+  } catch {
+    /* non-fatal */
+  }
+}
+
+const readNumber = (key: string, fallback: number) => {
+  try {
+    const v = window.localStorage.getItem(key)
+    const n = v === null ? NaN : Number(v)
+    return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+const writeNumber = (key: string, value: number) => {
+  try {
+    window.localStorage.setItem(key, String(value))
+  } catch {
+    /* non-fatal */
+  }
+}
+
+/** The saved mix: what's muted, and how loud each part is. */
+const readMix = (): Mix => ({
+  muted: readFlag(MUTE_KEY),
+  music: !readFlag(MUSIC_KEY),
+  biwa: !readFlag(BIWA_KEY),
+  volume: readNumber(VOLUME_KEYS.volume, DEFAULT_MIX.volume),
+  musicVolume: readNumber(VOLUME_KEYS.musicVolume, DEFAULT_MIX.musicVolume),
+  biwaVolume: readNumber(VOLUME_KEYS.biwaVolume, DEFAULT_MIX.biwaVolume),
+})
+
+const writeMix = (mix: Mix) => {
+  writeFlag(MUTE_KEY, mix.muted)
+  writeFlag(MUSIC_KEY, !mix.music)
+  writeFlag(BIWA_KEY, !mix.biwa)
+  for (const k of ["volume", "musicVolume", "biwaVolume"] as const) writeNumber(VOLUME_KEYS[k], mix[k])
+}
+
+/**
+ * Mutes and volumes, separately: the biwa strums that reshape the castle,
+ * the music, and everything at once.
+ */
+function SoundPanel({ mix, onChange, className }: { mix: Mix; onChange: (m: Partial<Mix>) => void; className?: string }) {
+  const rows = [
+    {
+      key: "biwa",
+      label: "Biwa strums",
+      hint: "when the castle shifts · B",
+      on: mix.biwa,
+      volume: mix.biwaVolume,
+      icon: Guitar,
+      toggle: () => onChange({ biwa: !mix.biwa }),
+      set: (v: number) => onChange({ biwaVolume: v, biwa: v > 0 }),
+    },
+    {
+      key: "music",
+      label: "Music",
+      hint: "the chase score · N",
+      on: mix.music,
+      volume: mix.musicVolume,
+      icon: Drum,
+      toggle: () => onChange({ music: !mix.music }),
+      set: (v: number) => onChange({ musicVolume: v, music: v > 0 }),
+    },
+    {
+      key: "all",
+      label: "All sound",
+      hint: "everything · M",
+      on: !mix.muted,
+      volume: mix.volume,
+      icon: mix.muted ? VolumeX : Volume2,
+      toggle: () => onChange({ muted: !mix.muted }),
+      set: (v: number) => onChange({ volume: v, muted: v === 0 }),
+    },
+  ]
+  return (
+    <div
+      className={cn(
+        "pointer-events-auto w-64 space-y-3 rounded-xl border border-[#e0a25a]/30 bg-[#0d0705]/85 p-3 text-left text-[#f3e3c6] shadow-[0_8px_30px_#000a] backdrop-blur-md",
+        className
+      )}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {rows.map((r) => {
+        const Icon = r.icon
+        const id = `ic-sound-${r.key}`
+        return (
+          <div key={r.key} className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={r.toggle}
+              aria-pressed={r.on}
+              aria-label={`${r.label}: ${r.on ? "on" : "off"}`}
+              title={r.on ? `Mute ${r.label.toLowerCase()}` : `Unmute ${r.label.toLowerCase()}`}
+              className={cn(chip, "size-8 shrink-0", !r.on && "text-[#f3e3c6]/35 line-through")}
+            >
+              <Icon className="size-4" aria-hidden />
+            </button>
+            <div className="min-w-0 flex-1">
+              <label htmlFor={id} className="flex items-baseline justify-between text-xs">
+                <span className={cn(!r.on && "text-[#f3e3c6]/45")}>{r.label}</span>
+                <span className="text-[0.625rem] text-[#f3e3c6]/40">{r.on ? `${Math.round(r.volume * 100)}%` : "off"}</span>
+              </label>
+              <input
+                id={id}
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round((r.on ? r.volume : 0) * 100)}
+                onChange={(e) => r.set(Number(e.target.value) / 100)}
+                className="mt-1 h-1 w-full cursor-pointer accent-[#e0a25a]"
+              />
+              <p className="mt-0.5 text-[0.625rem] text-[#f3e3c6]/35">{r.hint}</p>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 const isTouchDevice = () => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches
@@ -54,12 +183,14 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
   const [phase, setPhase] = React.useState<Phase>("title")
   const [error, setError] = React.useState<string | null>(null)
   const [paused, setPaused] = React.useState(false)
-  const [muted, setMuted] = React.useState(readMuted)
+  const [mix, setMixState] = React.useState(readMix)
+  const [soundOpen, setSoundOpen] = React.useState(false)
   const [found, setFound] = React.useState<Landmark[]>([])
   const [toasts, setToasts] = React.useState<Toast[]>([])
   const [titlecard, setTitlecard] = React.useState(false)
   const [beben, setBeben] = React.useState(0)
   const [stats, setStats] = React.useState<Stats | null>(null)
+  const [dropping, setDropping] = React.useState(false)
   const [stick, setStick] = React.useState<{ x: number; y: number; dx: number; dy: number } | null>(null)
 
   const playing = phase === "intro" || phase === "play"
@@ -87,6 +218,9 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
       case "titlecard":
         setTitlecard(true)
         window.setTimeout(() => setTitlecard(false), 3400)
+        break
+      case "drop":
+        setDropping(e.active)
         break
       case "ended":
         setStats(e.stats)
@@ -116,7 +250,7 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
       return
     }
     audioRef.current = new CastleAudio()
-    audioRef.current.setMuted(readMuted())
+    audioRef.current.setMix(readMix())
     newGame()
     return () => {
       gameRef.current?.dispose()
@@ -206,6 +340,32 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
     }
   }, [isFocused, pause])
 
+  const changeMix = React.useCallback((change: Partial<Mix>) => {
+    setMixState((was) => {
+      const next = { ...was, ...change }
+      audioRef.current?.setMix(next)
+      writeMix(next)
+      return next
+    })
+  }, [])
+
+  const soundKey = React.useCallback(
+    (key: SoundKey) =>
+      setMixState((was) => {
+        const next = { ...was }
+        if (key === "biwa") next.biwa = !was.biwa
+        else if (key === "music") next.music = !was.music
+        else next.muted = !was.muted
+        audioRef.current?.setMix(next)
+        writeMix(next)
+        const label = key === "biwa" ? "Biwa strums" : key === "music" ? "Music" : "Sound"
+        const on = key === "biwa" ? next.biwa : key === "music" ? next.music : !next.muted
+        onEvent({ type: "toast", title: `${label} ${on ? "on" : "off"}` })
+        return next
+      }),
+    [onEvent]
+  )
+
   React.useEffect(() => {
     const controls = () => gameRef.current?.input
     const opts = {
@@ -214,6 +374,7 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
       },
       active: () => Boolean(gameRef.current) && playingRef.current && !pausedRef.current && focusedRef.current,
       onStrum: () => gameRef.current?.strum({ manual: true }),
+      onSound: soundKey,
       onStick: setStick,
     }
     const offKeys = bindKeyboard(opts)
@@ -224,7 +385,7 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
       offMouse()
       offTouch()
     }
-  }, [touch])
+  }, [touch, soundKey])
 
   const enter = () => {
     audioRef.current?.start()
@@ -233,21 +394,13 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
     setStats(null)
     setFound([])
     setToasts([])
+    setDropping(false)
     game.start()
     pause(false)
     lock()
   }
 
-  const toggleMute = () => {
-    const next = !muted
-    setMuted(next)
-    audioRef.current?.setMuted(next)
-    try {
-      window.localStorage.setItem(MUTE_KEY, next ? "1" : "0")
-    } catch {
-      /* non-fatal */
-    }
-  }
+  const muted = mix.muted
 
   return (
     <div
@@ -258,7 +411,7 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
         ref={canvasRef}
         className="absolute inset-0 size-full"
         role="img"
-        aria-label="The Infinity Castle: rooms of tatami and sliding doors hanging in a bottomless void, lit by paper lanterns, rearranging themselves."
+        aria-label="The Infinity Castle: rooms of tatami and sliding doors hanging every which way in a bottomless void, lit by paper lanterns, rearranging themselves."
         onClick={() => playing && !paused && lock()}
       />
 
@@ -271,8 +424,8 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
         </div>
       )}
 
-      {/* ── HUD ─────────────────────────────────────────────────────── */}
-      {playing && (
+      {/* ── HUD (out of the way while you fall in) ───────────────────── */}
+      {playing && !dropping && (
         <>
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3 @md:p-4">
             <ul className="space-y-1" aria-label="Upper Moons found">
@@ -298,7 +451,33 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
               <button type="button" className={chip} onClick={() => gameRef.current?.strum({ manual: true })} aria-label="Provoke the biwa (F)" title="Provoke the biwa (F)">
                 <Music2 className="size-4" aria-hidden />
               </button>
-              <button type="button" className={chip} onClick={toggleMute} aria-label={muted ? "Sound on" : "Sound off"} title={muted ? "Sound on" : "Sound off"}>
+              <button
+                type="button"
+                className={cn(chip, !mix.biwa && "text-[#f3e3c6]/40")}
+                onClick={() => changeMix({ biwa: !mix.biwa })}
+                aria-label={mix.biwa ? "Mute the biwa strums (B)" : "Unmute the biwa strums (B)"}
+                aria-pressed={mix.biwa}
+                title={mix.biwa ? "Mute the biwa strums (B)" : "Unmute the biwa strums (B)"}
+              >
+                <Guitar className="size-4" aria-hidden />
+              </button>
+              <button
+                type="button"
+                className={cn(chip, soundOpen && "border-[#e0a25a]/70")}
+                onClick={() => setSoundOpen((o) => !o)}
+                aria-label="Sound settings"
+                aria-expanded={soundOpen}
+                title="Sound settings"
+              >
+                <SlidersHorizontal className="size-4" aria-hidden />
+              </button>
+              <button
+                type="button"
+                className={chip}
+                onClick={() => changeMix({ muted: !muted })}
+                aria-label={muted ? "Sound on (M)" : "Sound off (M)"}
+                title={muted ? "Sound on (M)" : "Sound off (M)"}
+              >
                 {muted ? <VolumeX className="size-4" aria-hidden /> : <Volume2 className="size-4" aria-hidden />}
               </button>
               <button
@@ -316,6 +495,8 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
             </div>
           </div>
 
+          {soundOpen && <SoundPanel mix={mix} onChange={changeMix} className="absolute top-14 right-3 z-20 @md:right-4" />}
+
           {/* Crosshair and Tanjiro's nose. */}
           <div className="pointer-events-none absolute top-1/2 left-1/2 z-20 -translate-x-1/2 -translate-y-1/2">
             <div className="size-1 rounded-full bg-[#f3e3c6]/70" />
@@ -331,7 +512,7 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
 
           {!touch && (
             <p className="pointer-events-none absolute right-4 bottom-3 z-20 hidden text-[0.6875rem] tracking-wide text-[#f3e3c6]/35 @2xl:block">
-              WASD walk · Shift run · Space jump · F biwa · Esc pause
+              WASD walk · Shift run · Space jump · F biwa · B strums · N music · M mute · Esc pause
             </p>
           )}
 
@@ -392,44 +573,54 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
 
       {/* ── Title ───────────────────────────────────────────────────── */}
       {phase === "title" && !error && (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-gradient-to-b from-black/30 via-black/10 to-black/70 p-6 text-center">
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_center,transparent_20%,#00000088_75%)] p-6 text-center">
           <p className={`${KANJI} text-5xl font-bold tracking-[0.25em] text-[#fff1d6] [text-shadow:0_0_36px_#ff5a1a] @md:text-7xl`}>無限城</p>
           <h2 className={`${SERIF} mt-2 text-sm tracking-[0.55em] text-[#f3e3c6]/85 @md:text-base`}>INFINITY CASTLE</h2>
-          <p className="mt-5 max-w-md text-sm leading-relaxed text-[#f3e3c6]/75">
-            Rooms of tatami and sliding doors hang in a bottomless dark. Every few dozen steps Nakime strums her
-            biwa, and the castle rearranges itself: rooms slide, stairs fold away, floors open, gravity turns.
-            Fall through and you may keep falling a long time. Follow the scent to the three Upper
-            Moons&rsquo; rooms, then climb to her.
+          <p className="mt-5 max-w-md text-sm leading-relaxed text-[#f3e3c6]/80 [text-shadow:0_1px_8px_#000]">
+            A biwa sounds and the floor is gone. You fall into a castle of tatami rooms hanging every which way in
+            a bottomless dark, crossed by long decks where whole buildings slide past like trains. Every building
+            pulls toward its own floor, so walls become floors. Every few dozen steps Nakime strums and it
+            rearranges itself. Follow the scent to the three Upper Moons&rsquo; rooms, then climb to her.
           </p>
           <button
             type="button"
             onClick={enter}
             className={`${SERIF} mt-6 rounded-full border border-[#e0a25a]/60 bg-[#5a1408]/50 px-7 py-2.5 text-lg tracking-[0.2em] text-[#fff1d6] shadow-[0_0_30px_#ff5a1a55] transition hover:bg-[#7a1c0a]/70 focus-visible:outline-2 focus-visible:outline-[#e0a25a]`}
           >
-            Enter the castle
+            Fall into the castle
           </button>
           <p className="mt-4 text-[0.6875rem] text-[#f3e3c6]/45">
             {touch
               ? "Left thumb walks · right thumb looks · tap to jump · sound on"
-              : "WASD to walk · mouse to look · Shift run · Space jump · F biwa · sound on"}
+              : "WASD to walk · mouse to look · Shift run · Space jump · F biwa · B strums · M mute · sound on"}
           </p>
         </div>
       )}
 
       {/* ── Pause ───────────────────────────────────────────────────── */}
       {paused && playing && (
-        <button
-          type="button"
+        <div
           onClick={() => {
             pause(false)
             lock()
           }}
-          className="absolute inset-0 z-30 flex cursor-pointer flex-col items-center justify-center bg-black/55 text-center backdrop-blur-[2px]"
+          className="absolute inset-0 z-30 flex cursor-pointer flex-col items-center justify-center gap-5 bg-black/55 p-4 text-center backdrop-blur-[2px]"
         >
-          <p className={`${KANJI} text-4xl text-[#fff1d6]/90`}>休</p>
-          <p className={`${SERIF} mt-2 text-xl tracking-[0.2em]`}>Paused</p>
-          <p className="mt-2 text-xs text-[#f3e3c6]/60">{touch ? "Tap to return" : "Click to return to the castle"}</p>
-        </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              pause(false)
+              lock()
+            }}
+            className="flex flex-col items-center focus-visible:outline-2 focus-visible:outline-[#e0a25a]"
+          >
+            <span className={`${KANJI} text-4xl text-[#fff1d6]/90`}>休</span>
+            <span className={`${SERIF} mt-2 text-xl tracking-[0.2em]`}>Paused</span>
+            <span className="mt-2 text-xs text-[#f3e3c6]/60">{touch ? "Tap to return" : "Click to return to the castle"}</span>
+          </button>
+          <SoundPanel mix={mix} onChange={changeMix} className="cursor-default" />
+        </div>
       )}
 
       {/* ── The end ─────────────────────────────────────────────────── */}

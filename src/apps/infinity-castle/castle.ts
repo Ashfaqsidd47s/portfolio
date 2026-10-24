@@ -1,4 +1,5 @@
 import { createRng } from "@/os/kernel/rng"
+import { TURNED, sideFacing } from "./orient"
 
 /**
  * The Infinity Castle as data: rooms on a 3D lattice, joined by bridges,
@@ -15,6 +16,16 @@ import { createRng } from "@/os/kernel/rng"
  * way they climb. Two passages can't collide — a stair and a bridge run
  * side by side, and stairs that share a gap climb in parallel, a floor
  * apart — so any two neighbouring rooms can always be joined.
+ *
+ * Strays are rooms Nakime has turned over — upside down or on a side —
+ * set into empty nodes with nothing above or below them. They aren't part
+ * of the maze: a spur (a bridge) reaches one whenever a hall stands next to
+ * it with the stray's door facing that way, and inside it, its floor is
+ * the floor. Their nodes and the ones above and below stay empty for good.
+ *
+ * Lines are rows of nodes kept clear for the castle's long train paths
+ * (see `lines.ts`): no room is built in them or slides into or across
+ * them, and a dock (a bridge) reaches the line from any room beside it.
  */
 
 /** Metres between neighbouring room centres. */
@@ -42,12 +53,14 @@ export const DIRS: readonly [number, number][] = [
 export const opposite = (d: Dir) => ((d + 2) % 4) as Dir
 
 export type Landmark = "kokushibo" | "doma" | "akaza"
-/** A hall has walls, a roof and a trapdoor; a terrace is an open-air stage. */
-export type RoomKind = "hall" | "terrace" | Landmark | "nakime"
+export type RoomKind = "hall" | Landmark | "nakime"
 export const LANDMARKS: readonly Landmark[] = ["kokushibo", "doma", "akaza"]
-export const isLandmark = (kind: RoomKind): kind is Landmark => (LANDMARKS as readonly string[]).includes(kind)
 
-export type Room = { id: number; kind: RoomKind; node: Node; variant: number }
+/** How a plain hall is built: tatami and fusuma, a pavilion of bamboo blinds, or bright shoji. */
+export const HALL_STYLES = ["hall", "sudare", "shoji"] as const
+export type HallStyle = (typeof HALL_STYLES)[number]
+
+export type Room = { id: number; kind: RoomKind; node: Node; variant: number; style: HallStyle }
 
 export type EdgeStyle = "bridge" | "corridor" | "stair"
 export type Edge = {
@@ -61,7 +74,25 @@ export type Edge = {
 }
 
 export type Move = { id: number; from: Node; to: Node }
-export type ShiftPlan = { moves: Move[]; removed: Edge[]; added: Edge[] }
+/** A stray turned to a new orientation (an index into `TURNED`). */
+export type Turn = { id: number; from: number; to: number }
+export type ShiftPlan = { moves: Move[]; removed: Edge[]; added: Edge[]; turned: Turn[] }
+
+/** A room turned over: upside down or on a side. `orient` indexes `TURNED`. */
+export type Stray = { id: number; node: Node; orient: number }
+
+/** A bridge from a hall (`anchor`) to a stray's door, running `dir` from the hall. */
+export type Spur = { key: string; stray: number; anchor: number; dir: Dir; side: number }
+
+/** A bridge from a room to the line beside it, running `dir` from the room, `len` metres. */
+export type Dock = { key: string; anchor: number; dir: Dir; len: number; line: number }
+
+/**
+ * A row of nodes kept clear for a train path: along `axis` (0 = x, 2 = z)
+ * at `level`, through `at` on the other horizontal axis. `half` is the
+ * deck's half-width, kerb included.
+ */
+export type LineRow = { axis: 0 | 2; level: number; at: number; half: number }
 
 export type CastleSize = { x: number; y: number; z: number }
 
@@ -70,6 +101,8 @@ export type ShiftOptions = {
   lockedRooms?: ReadonlySet<number>
   /** Passages that must survive (the player is on them). */
   lockedEdges?: ReadonlySet<string>
+  /** Strays that must not turn (the player is in or near them). */
+  lockedStrays?: ReadonlySet<number>
   /** Reject a slide, e.g. one whose path or destination crosses the player. */
   blocked?: (from: Node, to: Node) => boolean
   /** How many rooms to slide in all. */
@@ -121,6 +154,16 @@ export class Castle {
   readonly nakimeId: number
   /** Her chamber stays sealed until every Upper Moon's room has been found. */
   nakimeOpen = false
+  readonly strays: Stray[] = []
+  /** The ring's row (along x) and the z-line's row, if the castle is big enough for them. */
+  readonly rows: LineRow[] = []
+  /** The hall the visitor falls into, with nothing above it. */
+  readonly landingId: number
+  /** Nodes no room may slide into: strays, the space above and below them, and lines. */
+  private reserved = new Set<string>()
+  private lineNodes = new Set<string>()
+  /** Nodes kept clear for a while: the column the visitor falls down. */
+  readonly hold = new Set<string>()
   private byNode = new Map<string, number>()
   private rng: ReturnType<typeof createRng>
   private nextId = 1
@@ -130,7 +173,11 @@ export class Castle {
     this.rng = createRng(seed)
     this.nakimeNode = [Math.floor(size.x / 2), size.y, Math.floor(size.z / 2)]
     this.nakimeId = this.addRoom("nakime", this.nakimeNode).id
+    this.pickRows()
     this.generate()
+    this.landingId = this.pickLanding()
+    this.rooms.get(this.landingId)!.style = "hall"
+    this.placeStrays(5)
   }
 
   // ── Queries ────────────────────────────────────────────────────────────
@@ -200,30 +247,97 @@ export class Castle {
     return [...this.rooms.values()].find((r) => r.kind === kind)!
   }
 
-  /**
-   * A room high in the castle with another room somewhere below it in the
-   * same column, so a visitor dropped through its floor lands on something.
-   */
-  entryRoom() {
-    const halls = [...this.rooms.values()].filter((r) => r.kind === "hall")
-    const below = (r: Room) => {
-      for (let k = r.node[1] - 1; k >= 0; k--) {
-        if (this.roomAt([r.node[0], k, r.node[2]])) return r.node[1] - k
+  /** A node no room stands in and none may slide into. */
+  isReserved(n: Node) {
+    return this.reserved.has(nodeKey(n))
+  }
+
+  /** The nodes above the landing hall, up to the top of the lattice. */
+  landingColumn(): Node[] {
+    const [x, k, z] = this.rooms.get(this.landingId)!.node
+    const out: Node[] = []
+    for (let level = k + 1; level < this.size.y; level++) out.push([x, level, z])
+    return out
+  }
+
+  /** Every bridge that can reach a stray right now. */
+  spurs(): Spur[] {
+    const out: Spur[] = []
+    for (const s of this.strays) {
+      for (let d = 0; d < 4; d++) {
+        const [dx, dz] = DIRS[d]
+        const anchor = this.roomAt([s.node[0] - dx, s.node[1], s.node[2] - dz])
+        if (!anchor || anchor.kind !== "hall") continue
+        const side = sideFacing(TURNED[s.orient], [-dx, 0, -dz])
+        if (side < 0) continue
+        // Keyed by orientation too: a stray that turns over always gets a new bridge.
+        const key = `${s.id}:${anchor.id}:${d}:${side}:${s.orient}`
+        out.push({ key, stray: s.id, anchor: anchor.id, dir: d as Dir, side })
       }
-      return 0
     }
-    // Highest first, then the longest fall that still ends on a roof.
-    const ranked = halls
-      .map((r) => ({ r, drop: below(r) }))
-      .filter((c) => c.drop > 0)
-      .sort((p, q) => q.r.node[1] - p.r.node[1] || q.drop - p.drop)
-    return (ranked[0]?.r ?? halls[0]).id
+    return out
+  }
+
+  /** Every room standing beside a line, with the bridge it gets to the deck. */
+  docks(): Dock[] {
+    const out: Dock[] = []
+    this.rows.forEach((row, line) => {
+      const count = row.axis === 0 ? this.size.x : this.size.z
+      for (let i = 0; i < count; i++) {
+        const on: Node = row.axis === 0 ? [i, row.level, row.at] : [row.at, row.level, i]
+        for (const s of [-1, 1]) {
+          const n: Node = row.axis === 0 ? [i, row.level, row.at + s] : [row.at + s, row.level, i]
+          const room = this.roomAt(n)
+          if (!room || room.kind === "nakime") continue
+          const dir = sideTowards(n, on)!
+          out.push({ key: `${room.id}>${line}:${i}:${dir}`, anchor: room.id, dir, len: CELL - ROOM_R - row.half, line })
+        }
+      }
+    })
+    return out
+  }
+
+  /** On a line's row, or in it, or crossing it on the way somewhere. */
+  isLine(n: Node) {
+    return this.lineNodes.has(nodeKey(n))
+  }
+
+  /** Would a room sliding straight from one node to another pass through a line? */
+  crossesLine(from: Node, to: Node) {
+    for (let i = 1; i < 12; i++) {
+      const t = i / 12
+      const p: Node = [0, 1, 2].map((k) => Math.round(from[k] + (to[k] - from[k]) * t)) as Node
+      if (this.isLine(p)) return true
+    }
+    return false
   }
 
   // ── Building ───────────────────────────────────────────────────────────
 
+  /**
+   * The ring's row runs along x, off the middle, low enough to pass under
+   * Nakime's feet; the z-line's row crosses it a level or more away.
+   */
+  private pickRows() {
+    const { x, y, z } = this.size
+    if (x < 4 || z < 4 || y < 5) return
+    const ring: LineRow = { axis: 0, level: this.rng.pick([2, 3]), at: this.rng.pick([1, z - 2]), half: 5.62 }
+    const cross: LineRow = { axis: 2, level: this.rng.pick([1, 4]), at: this.rng.pick([1, x - 2]), half: 3.52 }
+    for (const row of [ring, cross]) {
+      this.rows.push(row)
+      const count = row.axis === 0 ? x : z
+      for (let i = 0; i < count; i++) {
+        const n: Node = row.axis === 0 ? [i, row.level, row.at] : [row.at, row.level, i]
+        this.reserved.add(nodeKey(n))
+        this.lineNodes.add(nodeKey(n))
+      }
+    }
+  }
+
   private addRoom(kind: RoomKind, node: Node) {
-    const room: Room = { id: this.nextId++, kind, node, variant: this.rng.next() }
+    const roll = this.rng.next()
+    const style: HallStyle = kind !== "hall" || roll < 0.5 ? "hall" : roll < 0.75 ? "sudare" : "shoji"
+    const room: Room = { id: this.nextId++, kind, node, variant: this.rng.next(), style }
     this.rooms.set(room.id, room)
     this.byNode.set(nodeKey(node), room.id)
     return room
@@ -257,7 +371,7 @@ export class Castle {
     for (let attempt = 0; placed.length < target && attempt < 20000; attempt++) {
       const from = this.rng.pick(placed)
       const n = this.rng.pick(this.candidateNeighbours(from.node))
-      if (!this.inBounds(n) || this.roomAt(n)) continue
+      if (!this.inBounds(n) || this.roomAt(n) || this.reserved.has(nodeKey(n))) continue
       const room = this.addRoom("hall", n)
       const edge = this.makeEdge(from, room)!
       this.edges.set(edge.key, edge)
@@ -273,8 +387,6 @@ export class Castle {
       }
     }
     this.placeLandmarks(placed)
-    // Some of the plain rooms are open-air stages instead of halls.
-    for (const r of placed) if (r.kind === "hall" && this.rng.chance(0.24)) r.kind = "terrace"
   }
 
   /** Upper One lives deepest, Upper Three highest, each far from the others. */
@@ -300,6 +412,67 @@ export class Castle {
     }
   }
 
+  /**
+   * A hall with an empty sky above it, low enough that the fall into it
+   * passes plenty of the castle, among neighbours to fall past.
+   */
+  private pickLanding() {
+    const [nx, , nz] = this.nakimeNode
+    const clear = (r: Room) => {
+      if (r.node[0] === nx && r.node[2] === nz) return false
+      // The fall in mustn't come down through a line's deck.
+      if (this.rows.some((row) => r.node[row.axis === 0 ? 2 : 0] === row.at)) return false
+      for (let k = r.node[1] + 1; k < this.size.y; k++) if (this.roomAt([r.node[0], k, r.node[2]])) return false
+      return true
+    }
+    const around = (r: Room) => this.candidateNeighbours(r.node).filter((n) => this.roomAt(n)).length
+    const halls = [...this.rooms.values()].filter((r) => r.kind === "hall")
+    const score = (r: Room) => -Math.abs(r.node[1] - 1.5) * 1.5 + around(r) * 0.4 + this.rng.next()
+    const pool = halls.filter(clear)
+    return (pool.length ? pool : halls).reduce((best, r) => (score(r) > score(best) ? r : best)).id
+  }
+
+  /**
+   * Turned rooms in empty nodes with empty nodes above and below, clear of
+   * the fall into the castle and of the rooms at Nakime's feet. Each one is
+   * turned, where it can be, so that a door faces a hall next to it.
+   */
+  private placeStrays(count: number) {
+    const [cx, cy, cz] = this.nakimeNode
+    const feet = new Set(DIRS.map(([dx, dz]) => nodeKey([cx + dx, cy - 1, cz + dz])))
+    const land = this.rooms.get(this.landingId)!.node
+    const column = (n: Node) => [n, [n[0], n[1] + 1, n[2]] as Node, [n[0], n[1] - 1, n[2]] as Node]
+    const free = (n: Node) => column(n).every((m) => !this.roomAt(m) && !this.reserved.has(nodeKey(m)) && !feet.has(nodeKey(m)))
+    const anchors = (n: Node) =>
+      DIRS.filter(([dx, dz]) => this.roomAt([n[0] - dx, n[1], n[2] - dz])?.kind === "hall").length
+    const candidates = this.shuffle(
+      this.allNodes().filter((n) => free(n) && !(n[0] === land[0] && n[2] === land[2] && n[1] >= land[1]))
+    ).sort((a, b) => anchors(b) - anchors(a))
+    for (const node of candidates) {
+      if (this.strays.length >= count) break
+      if (!free(node)) continue
+      const stray: Stray = { id: this.nextId++, node, orient: 0 }
+      this.strays.push(stray)
+      for (const m of column(node)) this.reserved.add(nodeKey(m))
+      this.reorient(stray)
+    }
+  }
+
+  /**
+   * A new orientation for a stray, preferring one with a door onto a hall.
+   * Upside down comes up more often than its share (4 of the 20 turns).
+   */
+  private reorient(stray: Stray) {
+    const order = this.shuffle(TURNED.map((_, i) => i).filter((i) => i !== stray.orient))
+    if (this.rng.chance(0.4)) order.sort((a, b) => TURNED[a][4] - TURNED[b][4])
+    const was = stray.orient
+    for (const i of order) {
+      stray.orient = i
+      if (this.spurs().some((s) => s.stray === stray.id)) return
+    }
+    stray.orient = order[0] ?? was
+  }
+
   // ── Nakime's biwa ──────────────────────────────────────────────────────
 
   /** Rooms joined by "could have a passage", regardless of gaps. */
@@ -320,8 +493,8 @@ export class Castle {
     return seen.size === rooms.length
   }
 
-  /** A room at `n` would have a neighbour to join (other than itself). */
-  touchesMaze(n: Node, self: Room) {
+  /** A room at `n` would have a neighbour to join (other than `self`). */
+  touchesMaze(n: Node, self?: Room) {
     return this.candidateNeighbours(n).some((m) => {
       const q = this.roomAt(m)
       return q && q !== self && (q.kind !== "nakime" || this.nakimeOpen)
@@ -346,7 +519,7 @@ export class Castle {
     const count = opts.count ?? 4
     // Rooms at either end of a locked passage can't move either.
     const pinned = new Set(lockedRooms)
-    // Rooms that must stay whatever `first` says: ends of a locked passage, Nakime's feet.
+    // Rooms that stay whatever `first` says: ends of a locked passage, Nakime's feet.
     const held = new Set<number>()
     for (const key of lockedEdges) {
       const e = this.edges.get(key)
@@ -370,7 +543,14 @@ export class Castle {
         return false
       }
       const options = targets.filter(
-        (n) => !this.roomAt(n) && !sameNode(n, from) && this.touchesMaze(n, room) && !check(from, n)
+        (n) =>
+          !this.roomAt(n) &&
+          !sameNode(n, from) &&
+          !this.reserved.has(nodeKey(n)) &&
+          !this.hold.has(nodeKey(n)) &&
+          this.touchesMaze(n, room) &&
+          !this.crossesLine(from, n) &&
+          !check(from, n)
       )
       this.byNode.set(nodeKey(from), room.id)
       if (!options.length) return false
@@ -408,8 +588,18 @@ export class Castle {
     for (const room of movable) {
       if (moves.length >= count) break
       if (pinned.has(room.id) || moves.some((m) => m.id === room.id)) continue
-      if (isLandmark(room.kind) && !this.rng.chance(0.3)) continue
+      if (room.kind !== "hall" && !this.rng.chance(0.3)) continue
       tryMove(room, this.shuffle(all.slice()))
+    }
+
+    // Now and then a stray turns over somewhere else in the dark.
+    const turned: Turn[] = []
+    const lockedStrays = opts.lockedStrays ?? new Set<number>()
+    for (const stray of this.shuffle(this.strays.slice())) {
+      if (turned.length >= 2 || lockedStrays.has(stray.id) || !this.rng.chance(0.35)) continue
+      const from = stray.orient
+      this.reorient(stray)
+      turned.push({ id: stray.id, from, to: stray.orient })
     }
 
     const old = [...this.edges.values()]
@@ -418,7 +608,38 @@ export class Castle {
     const added = [...next.values()].filter((e) => !this.edges.has(e.key))
     this.edges.clear()
     for (const [k, e] of next) this.edges.set(k, e)
-    return { moves, removed, added }
+    return { moves, removed, added, turned }
+  }
+
+  /**
+   * A new hall in a free node by the maze, nearest `near` (in metres), with
+   * a passage or two into it: where Nakime sets down a room she caught
+   * someone in. Null if there's nowhere to put one.
+   */
+  adopt(near: Vec3): { room: Room; edges: Edge[] } | null {
+    const free = this.allNodes().filter(
+      (n) => !this.roomAt(n) && !this.reserved.has(nodeKey(n)) && !this.hold.has(nodeKey(n)) && this.touchesMaze(n)
+    )
+    if (!free.length) return null
+    const dist = (n: Node) => {
+      const c = nodeCenter(n)
+      return Math.hypot(c[0] - near[0], c[1] - near[1], c[2] - near[2])
+    }
+    const node = free.reduce((best, n) => (dist(n) < dist(best) ? n : best))
+    const room = this.addRoom("hall", node)
+    room.style = "hall"
+    const neighbours = this.candidateNeighbours(node)
+      .map((m) => this.roomAt(m))
+      .filter((q): q is Room => !!q && q !== room && (q.kind !== "nakime" || this.nakimeOpen))
+      // Level ones first: a bridge rather than a stair, where there's a choice.
+      .sort((a, b) => Math.abs(a.node[1] - node[1]) - Math.abs(b.node[1] - node[1]) + (this.rng.next() - 0.5) * 0.5)
+    const edges: Edge[] = []
+    for (const q of neighbours.slice(0, this.rng.chance(0.5) ? 2 : 1)) {
+      const e = this.makeEdge(room, q)!
+      this.edges.set(e.key, e)
+      edges.push(e)
+    }
+    return { room, edges }
   }
 
   /**

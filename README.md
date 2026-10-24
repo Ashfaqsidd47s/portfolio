@@ -92,9 +92,12 @@ src/
 ├─ apps/                      # one folder per app, each its own chunk
 │  ├─ trypnow/                # supplier + agent demo: builder, AI listing, bookings, marketplace
 │  ├─ infinity-castle/        # Demon Slayer's Infinity Castle, first person (three.js + GLSL):
-│  │                          #   castle.ts (lattice + Nakime's shifts, + tests), physics.ts
+│  │                          #   castle.ts (lattice + Nakime's shifts + turned rooms, + tests),
+│  │                          #   lines.ts (train paths, cars, great halls, + tests),
+│  │                          #   orient.ts (quarter-turn orientations, + tests), physics.ts
 │  │                          #   (any-axis gravity, + tests), world.ts (live blocks, strum
-│  │                          #   timeline), game.ts, audio.ts (synth biwa), render/ (kit, shaders)
+│  │                          #   timeline), game.ts, audio.ts (synth biwa), score.ts (chase music),
+│  │                          #   render/ (kit, shaders, drop: the opening fall)
 │  ├─ about/
 │  └─ project-info/           # stand-in for projects whose demo isn't built yet
 ├─ data/profile.ts            # single source of truth for all content
@@ -174,6 +177,15 @@ src/
 
 ### Infinity Castle (`/apps/infinity-castle`)
 
+- **The way in is a fall.** Behind the title you drop, endlessly, down a
+  well of stacked rooms with their floors cut away: shoji and fusuma walls,
+  polished ledges, gold nail covers. It wraps round the camera. Its storeys
+  keep turning a quarter and slamming their panels. Click in and the fall
+  speeds up, the turning gets faster, and then a strum blows the well
+  apart. You fall on through the open void past rooms tumbling every which
+  way, and the castle shifts below you. The hall you're aimed at splits
+  its ceiling and roof in four to take you, and closes over you once
+  you've landed. The column you fall down is kept clear until then.
 - **The castle is a lattice**: rooms on a 5 × 6 × 5 grid of nodes, joined by
   bridges, enclosed shoji corridors and long stairs in the gaps between them.
   Every room has a veranda, so passages land in lanes (bridges opposite the
@@ -189,9 +201,47 @@ src/
   glide, new passages unfold, and doors all over the castle bang shut and fly
   open in a wave. Some strums open the trapdoor under you or turn your room
   over (gravity onto a wall or the ceiling) until the next strum.
+- **Turned rooms**: a few full rooms sit upside down or on their side in
+  empty nodes, with the nodes above and below them kept free. A bridge
+  stretches from a hall beside one into whichever of its doors faces that
+  way. Step through the door and its floor becomes the floor: the world
+  rolls over, and you can walk its tatami with the castle hanging sideways
+  or overhead outside. Step back onto the bridge and down is down again.
+  Strums turn them over too, and their bridges fold away and unfold to
+  match.
+- **Not one kind of room.** Plain halls come in three styles: gold fusuma
+  under a roof that can open, a lacquered pavilion hung with bamboo blinds,
+  and a bright shoji room with a low table, cushions and a vase of
+  branches.
+- **Train paths** (`lines.ts`): two rows of nodes are kept clear for long
+  decks, with rails, kerbs and lanterns, and rooms beside them get a bridge
+  (a dock) onto the deck. The ring runs through the castle along x, meets a
+  deck standing straight up at either end, and closes overhead in a deck
+  hanging upside down above everything. Carriages, open pavilions and
+  two-storey towers loop along the level decks and fold away into the
+  corners; lifts shuttle up and down the standing ones. The z-line crosses
+  it a level or more away, between two great halls of pillars (thirty
+  metres of tatami, two tiers of walls, a balcony, a dais with a gold
+  screen). One stands upright and takes the line through a torii gate. The
+  other is turned on its side, so its floor is the wall the line runs into.
+  A train shuttles between them with one carriage tipped on its side. Cars
+  slide under your feet and scoop you aboard, then carry you.
+- **Every building has its own gravity.** Each block knows which way is up
+  for it: rooms and passages are upright, decks, cars and halls carry their
+  own frames. Walk (or jump, or fall) into a surface that is another
+  building's floor and gravity turns to it: walk off the end of the ring's
+  floor into the standing deck and you walk up it; walk down it into the
+  floor and down is down again; step from the line onto the turned hall's
+  floor and you stand on what was a wall.
+- **Falling is caught.** Fall for more than a second with nothing below and
+  the biwa sounds: a hall rushes up out of the dark, takes you in through
+  its open roof, closes over you and brakes, and then Nakime slides it into
+  a free node beside the maze, where it becomes part of the castle with new
+  passages unfolding into it.
 - **Physics** is a box against axis-aligned boxes, with gravity along any of
   six axes, step-up and ground snapping for the stairs, substeps so a long
-  fall can't tunnel, and moving floors that carry you. Fall out of the
+  fall can't tunnel, and moving floors that carry you. Every orientation is
+  a quarter turn, so a turned room's collision boxes stay axis-aligned. Fall out of the
   castle and Nakime drops you into a room somewhere else.
 - **Rendering**: each room or passage is one merged mesh. Its vertices carry
   a material id and a moving part (door, rail gate, trapdoor) that the vertex
@@ -200,17 +250,30 @@ src/
   tiles, chōchin lanterns and the Upper Moons' rooms procedurally, lit by
   the block's own lanterns. Beyond reach, ~3,700 instanced rooms (some
   upside down or on their side) step to new places on every strum. Post:
-  bloom, then a pass for the strum's shockwave, colour fringing, teal/amber
-  grading, vignette and grain. Resolution adapts to hold the frame rate.
+  bloom, then a pass for the strum's shockwave, colour fringing, a zoom blur
+  and anime speed lines while you fall, teal/amber grading, vignette and
+  grain. While you fall, the distant castle shifts several times a second. Resolution adapts to hold the frame rate.
 - **Goal**: Tanjiro's nose (an arrow round the crosshair) points to the
   nearest Upper Moon's room. Find Kokushibo's moon hall, Doma's lotus pond
   and Akaza's ring and Nakime's chamber unseals; reach her and the castle is
   dragged up into the dawn.
 - **Sound** is synthesised: a Karplus–Strong biwa with a buzzing attack, a
   long echo, sliding fusuma, rumbling rooms, steps, wind and Nakime's melody,
-  positioned where she sits.
+  positioned where she sits. The biwa (the strums that reshape the castle,
+  and her melody) has its own bus, set well under the rest, with its own
+  mute (`B`) and volume. Music (`N`) and all sound (`M`) mute separately
+  too; the volumes are in the sound panel (the sliders chip, or the pause
+  screen) and are remembered.
+- **Music**: an original chase score (`score.ts`), scheduled ahead on the
+  audio clock: odaiko and shime drums, a staccato biwa riff and a low men's
+  chorus chanting long "nooo" calls answered by quick "to-no-no-no"s, all in
+  the in scale. A quiet chant waits during the drop; the drums and biwa come
+  in once the chase starts, harder when you run, fall or the castle moves,
+  and a drum roll carries the finale. It has its own on/off toggle. To use a
+  recording instead, put it at `public/audio/infinity-castle.mp3` (a track
+  you have the rights to publish); it replaces the synthesised score.
 - **Controls**: WASD / mouse (pointer lock, or drag where it's refused),
-  Shift, Space, F. On touch: a floating joystick on the left (push far to
+  Shift, Space, F, and B / N / M for the biwa, music and all sound. On touch: a floating joystick on the left (push far to
   run), drag on the right to look, tap to jump. Esc or losing focus pauses.
 
 ### The journey (`/journey`)

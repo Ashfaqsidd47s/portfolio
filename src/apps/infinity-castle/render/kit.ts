@@ -1,8 +1,6 @@
 import type * as THREE from "three"
-import { LEVEL, ROOM_R, SPAN, STAIR_LANE, type EdgeStyle, type RoomKind, type Vec3 } from "../castle"
-
-/** Buildings that never stop: carriages of the halls that run like trains. */
-export type CarKind = "carriage" | "deck" | "great"
+import { LEVEL, ROOM_R, SPAN, STAIR_LANE, type EdgeStyle, type HallStyle, type RoomKind, type Vec3 } from "../castle"
+import { CAR_HALF, CAR_LENGTH, DECK_HALF, GREAT_H, GREAT_R, SEGMENT, type CarKind, type DeckKind } from "../lines"
 import { Builder, MAT, type Light, type LocalBox } from "./builder"
 
 /**
@@ -16,21 +14,26 @@ import { Builder, MAT, type Light, type LocalBox } from "./builder"
  *
  * Moving parts (see `builder.ts`), per side d (0 +x, 1 +z, 2 −x, 3 −z):
  * door d + 1; rail gates 5 + 3d + lane (lane 0 at −STAIR_LANE along the
- * side, 1 in the middle, 2 at +STAIR_LANE); the trapdoor is 17.
+ * side, 1 in the middle, 2 at +STAIR_LANE); the trapdoor is 17; a hall's
+ * ceiling and roof, which split in four and fly apart to let someone fall
+ * in, are 18.
  */
 
-export const PART_COUNT = 18
-export const MAX_LIGHTS = 10
+export const PART_COUNT = 19
+/** A great hall needs a score of lanterns; everything else uses far fewer. */
+export const MAX_LIGHTS = 20
 export const doorPart = (side: number) => 1 + side
 export const gatePart = (side: number, lane: number) => 5 + side * 3 + lane
 export const TRAP_PART = 17
+export const ROOF_PART = 18
 
 /** Wall plane: the tatami room is 2·WALL across. */
 export const WALL = 4.6
 const R = ROOM_R
-const WALL_H = 3.4
-const DOOR_W = 1.6
-const DOOR_H = 2.9
+export const WALL_H = 3.4
+/** Half the width of a doorway, and its height. */
+export const DOOR_W = 1.6
+export const DOOR_H = 2.9
 const TRAP = 1.5
 const STAIR_HALF = 1.1
 const GATE_HALF = 1.25
@@ -41,11 +44,11 @@ export type Template = {
   lights: Light[]
 }
 
-const WARM: Vec3 = [1.0, 0.52, 0.22]
+export const WARM: Vec3 = [1.0, 0.52, 0.22]
 const PALE: Vec3 = [1.0, 0.78, 0.5]
 
 /** A red paper chōchin hanging from a cord. */
-function lantern(b: Builder, x: number, y: number, z: number, size = 1, cord = 0.5) {
+export function lantern(b: Builder, x: number, y: number, z: number, size = 1, cord = 0.5) {
   const r = 0.26 * size
   const h = 0.58 * size
   const profile: [number, number][] = []
@@ -137,7 +140,17 @@ function rail(b: Builder, side: number, mat: number = MAT.lacquer) {
   run(z, R, 0)
 }
 
-type Shell = { wall: number; transom: number; doors: number; lightColor: Vec3; inner: Vec3[] }
+type Shell = {
+  wall: number
+  transom: number
+  doors: number
+  /** Corner pillars and door posts (dark wood unless given). */
+  pillar?: number
+  lightColor: Vec3
+  inner: Vec3[]
+  /** The ceiling and roof are a moving part (halls only). */
+  skylight?: boolean
+}
 
 /** Walls of sliding doors, the ceiling and a hipped roof. */
 function shell(b: Builder, s: Shell) {
@@ -162,9 +175,10 @@ function shell(b: Builder, s: Shell) {
       }
       b.solid([x0, 0, -DOOR_W], [WALL + 0.07, DOOR_H, DOOR_W], doorPart(d))
       // Corner pillar and door posts.
-      b.box([WALL - 0.24, -0.1, WALL - 0.24], [WALL + 0.1, WALL_H + 0.1, WALL + 0.1], MAT.woodDark, { grain: true })
+      const pillar = s.pillar ?? MAT.woodDark
+      b.box([WALL - 0.24, -0.1, WALL - 0.24], [WALL + 0.1, WALL_H + 0.1, WALL + 0.1], pillar, { grain: true })
       for (const z of [-DOOR_W - 0.12, DOOR_W]) {
-        b.box([x0 - 0.04, 0, z], [WALL + 0.08, DOOR_H, z + 0.12], MAT.woodDark, { grain: true })
+        b.box([x0 - 0.04, 0, z], [WALL + 0.08, DOOR_H, z + 0.12], pillar, { grain: true })
       }
       // A lantern over every door.
       lantern(b, WALL + 0.62, 3.1, 0, 1.15, 0.5)
@@ -172,45 +186,60 @@ function shell(b: Builder, s: Shell) {
       rail(b, d)
     })
   }
-  // Ceiling: coffered inside, a broad eave outside.
+  // Ceiling: coffered inside, a broad eave outside. Built a quarter at a
+  // time (a pinwheel of quadrants) so a hall's can split and fly apart.
   const top = WALL_H + 0.25
-  b.box([-WALL, WALL_H, -WALL], [WALL, top, WALL], MAT.woodDark)
-  for (const c of [-2.3, 0, 2.3]) {
-    b.box([-WALL, WALL_H - 0.16, c - 0.07], [WALL, WALL_H, c + 0.07], MAT.woodDark, { grain: true })
-    b.box([c - 0.07, WALL_H - 0.16, -WALL], [c + 0.07, WALL_H, WALL], MAT.woodDark, { grain: true })
-  }
   const E = WALL + 0.62
-  b.box([-E, top, -E], [E, top + 0.2, E], MAT.woodDark)
-  b.solid([-E, WALL_H, -E], [E, top + 0.2, E])
-  roof(b, E + 0.1, top + 0.2, 1.1, 6.4)
+  const lid = s.skylight ? ROOF_PART : 0
+  for (let d = 0; d < 4; d++) {
+    b.frame(d, [0, 0, 0], () => {
+      b.moving(lid, [9, 26, -9], () => {
+        b.box([0, WALL_H, -WALL], [WALL, top, 0], MAT.woodDark)
+        b.box([0, WALL_H - 0.16, -2.37], [WALL, WALL_H, -2.23], MAT.woodDark, { grain: true })
+        b.box([2.23, WALL_H - 0.16, -WALL], [2.37, WALL_H, 0], MAT.woodDark, { grain: true })
+        b.box([0, WALL_H - 0.16, -0.07], [WALL, WALL_H, 0], MAT.woodDark, { grain: true })
+        b.box([0, WALL_H - 0.16, -WALL], [0.07, WALL_H, 0], MAT.woodDark, { grain: true })
+        b.box([0, top, -E], [E, top + 0.2, 0], MAT.woodDark)
+      })
+    })
+  }
+  b.solid([-E, WALL_H, -E], [E, top + 0.2, E], lid)
+  roof(b, E + 0.1, top + 0.2, 1.1, 6.4, lid)
   for (const p of s.inner) {
     lantern(b, p[0], p[1], p[2], 1, WALL_H - p[1])
     b.light([p[0], p[1] - 0.35, p[2]], s.lightColor)
   }
 }
 
-/** A hipped roof from an eave half-width `e` at `y0` up to a cap at `y1`. */
-function roof(b: Builder, e: number, y0: number, cap: number, y1: number) {
+/**
+ * A hipped roof from an eave half-width `e` at `y0` up to a cap at `y1`.
+ * As moving part `part`, each face flies off its own side and the cap goes up.
+ */
+function roof(b: Builder, e: number, y0: number, cap: number, y1: number, part = 0) {
   for (let d = 0; d < 4; d++) {
     b.frame(d, [0, 0, 0], () => {
-      const slope = Math.hypot(e - cap, y1 - y0)
-      b.quad([e, y0, e], [e, y0, -e], [cap, y1, -cap], [cap, y1, cap], MAT.roof, [
-        [-e, 0],
-        [e, 0],
-        [cap, slope],
-        [-cap, slope],
-      ])
-      // Upturned corner tip.
-      b.box([e - 0.25, y0 - 0.05, e - 0.25], [e + 0.2, y0 + 0.18, e + 0.2], MAT.woodDark)
+      b.moving(part, [14, 22, 0], () => {
+        const slope = Math.hypot(e - cap, y1 - y0)
+        b.quad([e, y0, e], [e, y0, -e], [cap, y1, -cap], [cap, y1, cap], MAT.roof, [
+          [-e, 0],
+          [e, 0],
+          [cap, slope],
+          [-cap, slope],
+        ])
+        // Upturned corner tip.
+        b.box([e - 0.25, y0 - 0.05, e - 0.25], [e + 0.2, y0 + 0.18, e + 0.2], MAT.woodDark)
+      })
     })
   }
-  b.box([-cap - 0.1, y1, -cap - 0.1], [cap + 0.1, y1 + 0.18, cap + 0.1], MAT.woodDark)
-  b.box([-0.18, y1 + 0.18, -cap], [0.18, y1 + 0.42, cap], MAT.roof)
+  b.moving(part, [0, 34, 0], () => {
+    b.box([-cap - 0.1, y1, -cap - 0.1], [cap + 0.1, y1 + 0.18, cap + 0.1], MAT.woodDark)
+    b.box([-0.18, y1 + 0.18, -cap], [0.18, y1 + 0.42, cap], MAT.roof)
+  })
   // Something to stand on after a fall: the roof as four terraces.
   for (let i = 0; i < 4; i++) {
     const w = e - (i * (e - cap)) / 4
     const h = y0 + ((i + 0.6) * (y1 - y0)) / 4
-    b.solid([-w, y0, -w], [w, h, w])
+    b.solid([-w, y0, -w], [w, h, w], part)
   }
 }
 
@@ -221,17 +250,57 @@ const INNER: Vec3[] = [
   [-2.3, 2.6, 2.3],
 ]
 
+/** A plain hall in one of its styles. Only the classic one has a roof that opens. */
+export function buildHall(style: HallStyle): Template {
+  const b = new Builder()
+  platform(b, { trap: true, floor: MAT.tatami })
+  switch (style) {
+    case "hall":
+      shell(b, { wall: MAT.fusuma, transom: MAT.shoji, doors: MAT.fusuma, lightColor: WARM, inner: INNER, skylight: true })
+      break
+    case "sudare":
+      // A lacquered pavilion hung with bamboo blinds, lit low and red.
+      shell(b, { wall: MAT.sudare, transom: MAT.sudare, doors: MAT.sudare, pillar: MAT.lacquer, lightColor: [1.0, 0.42, 0.2], inner: INNER })
+      for (let d = 0; d < 4; d++) {
+        b.frame(d, [0, 0, 0], () => {
+          // Red posts between the blinds, and tassels at the eave.
+          for (const z of [-3.1, 3.1]) b.box([WALL - 0.2, 0, z - 0.09], [WALL + 0.02, WALL_H, z + 0.09], MAT.lacquer, { grain: true })
+          for (const z of [-3.6, 3.6]) b.box([WALL + 0.35, 2.75, z - 0.03], [WALL + 0.41, 3.35, z + 0.03], MAT.gold)
+        })
+      }
+      break
+    case "shoji":
+      // Bright paper walls, a low table and cushions in a corner, a vase of branches in another.
+      shell(b, { wall: MAT.shoji, transom: MAT.fusuma, doors: MAT.shoji, lightColor: [1.0, 0.66, 0.36], inner: INNER })
+      b.box([2.1, 0, 2.1], [3.9, 0.32, 3.4], MAT.lacquer, { solid: true })
+      b.box([2.0, 0.32, 2.0], [4.0, 0.38, 3.5], MAT.woodDark)
+      for (const [x, z] of [
+        [3.0, 1.5],
+        [3.0, 4.0],
+        [1.5, 2.75],
+      ]) {
+        b.box([x - 0.32, 0, z - 0.32], [x + 0.32, 0.12, z + 0.32], MAT.kimono)
+      }
+      b.lathe([-3.4, 0, -3.4], [[0.18, 0], [0.26, 0.25], [0.12, 0.55], [0.15, 0.62]], 10, MAT.lacquer)
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2
+        b.box([-3.4 + Math.cos(a) * 0.2 - 0.02, 0.6, -3.4 + Math.sin(a) * 0.2 - 0.02], [-3.4 + Math.cos(a) * 0.45 + 0.02, 1.4 + i * 0.12, -3.4 + Math.sin(a) * 0.45 + 0.02], MAT.woodDark)
+        b.box([-3.4 + Math.cos(a) * 0.45 - 0.12, 1.3 + i * 0.12, -3.4 + Math.sin(a) * 0.45 - 0.12], [-3.4 + Math.cos(a) * 0.45 + 0.12, 1.5 + i * 0.12, -3.4 + Math.sin(a) * 0.45 + 0.12], MAT.lotus)
+      }
+      b.solid([-3.7, 0, -3.7], [-3.1, 1.2, -3.1])
+      // A hanging scroll on the panel beside a door.
+      b.box([-WALL + 0.15, 0.9, 2.6], [-WALL + 0.18, 2.6, 3.6], MAT.plaster)
+      b.box([-WALL + 0.14, 2.55, 2.5], [-WALL + 0.2, 2.65, 3.7], MAT.woodDark)
+      b.box([-WALL + 0.14, 0.85, 2.5], [-WALL + 0.2, 0.95, 3.7], MAT.woodDark)
+      break
+  }
+  return { geometry: b.geometry(), boxes: b.boxes, lights: b.lights.slice(0, MAX_LIGHTS) }
+}
+
 export function buildRoom(kind: RoomKind): Template {
+  if (kind === "hall") return buildHall("hall")
   const b = new Builder()
   switch (kind) {
-    case "hall":
-      platform(b, { trap: true, floor: MAT.tatami })
-      shell(b, { wall: MAT.fusuma, transom: MAT.shoji, doors: MAT.fusuma, lightColor: WARM, inner: INNER })
-      break
-    case "terrace":
-      platform(b, { trap: false, floor: MAT.woodLight })
-      terrace(b)
-      break
     case "akaza":
       akaza(b)
       break
@@ -252,37 +321,6 @@ export function buildRoom(kind: RoomKind): Template {
       break
   }
   return { geometry: b.geometry(), boxes: b.boxes, lights: b.lights.slice(0, MAX_LIGHTS) }
-}
-
-/**
- * An open-air stage: no walls or roof, so it's somewhere to land. Lantern
- * posts at the corners and a torii across the middle.
- */
-function terrace(b: Builder) {
-  const P = R - 0.45
-  for (const [x, z] of [
-    [-1, -1],
-    [1, -1],
-    [1, 1],
-    [-1, 1],
-  ]) {
-    b.box([x * P - 0.12, 0, z * P - 0.12], [x * P + 0.12, 2.8, z * P + 0.12], MAT.woodDark, { grain: true, solid: true })
-    b.box([x * P - 0.04, 2.7, z * (P - 0.6)], [x * P + 0.04, 2.78, z * P], MAT.woodDark)
-    lantern(b, x * P, 2.7, z * (P - 0.6), 1.1, 0.1)
-    b.light([x * (P - 0.3), 2.1, z * (P - 0.9)], WARM)
-  }
-  // The torii: two red pillars, a tie beam and the upswept lintel.
-  for (const z of [-3.1, 3.1]) {
-    b.lathe([0, 0, z], [[0.24, 0], [0.2, 4.6]], 10, MAT.lacquer)
-    b.box([-0.3, 0, z - 0.3], [0.3, 0.3, z + 0.3], MAT.woodDark)
-    b.solid([-0.24, 0, z - 0.24], [0.24, 4.6, z + 0.24])
-  }
-  b.box([-0.14, 3.9, -3.7], [0.14, 4.15, 3.7], MAT.lacquer, { grain: true })
-  b.box([-0.22, 4.6, -4.3], [0.22, 4.85, 4.3], MAT.lacquer, { grain: true })
-  b.box([-0.26, 4.85, -4.5], [0.26, 5.0, 4.5], MAT.woodDark)
-  b.box([-0.08, 4.15, -0.3], [0.08, 4.6, 0.3], MAT.plaster)
-  b.light([0, 3.6, 0], [1.0, 0.4, 0.25])
-  for (let d = 0; d < 4; d++) b.frame(d, [0, 0, 0], () => rail(b, d))
 }
 
 /**
@@ -548,122 +586,311 @@ function sloped(b: Builder, za: number, zb: number, y0: number, y1: number, mat:
   )
 }
 
-// ── Carriages ────────────────────────────────────────────────────────────
+// ── The train paths ──────────────────────────────────────────────────────
 
-/** Half-length of each carriage along its run (+x), not counting couplers. */
-export const CAR_HALF: Record<CarKind, number> = { carriage: 7, deck: 5, great: 10 }
-/** The plank each carriage puts out at both ends, to its neighbour. */
-export const COUPLER = 0.9
+/**
+ * One segment of a line's deck, SEGMENT long and centred on the origin,
+ * running along x with its surface at y = 0: planks on deep beams, a
+ * lacquered kerb, iron rails for each lane, and lantern posts outside the
+ * kerb where no car can sweep them (and no dock lands: the posts stand
+ * halfway between the castle's nodes).
+ */
+export function buildDeck(kind: DeckKind): Template {
+  const b = new Builder()
+  const W = DECK_HALF[kind]
+  const L = SEGMENT / 2
+  b.box([-L, -0.12, -W], [L, 0, W], MAT.woodLight, { grain: true })
+  b.box([-L, -0.25, -W + 0.1], [L, -0.12, W - 0.1], MAT.woodDark)
+  b.solid([-L, -0.25, -W - 0.12], [L, 0, W + 0.12])
+  for (const z of [-W + 0.6, W - 0.6]) b.box([-L, -1.2, z - 0.22], [L, -0.25, z + 0.22], MAT.woodDark, { grain: true })
+  for (let x = -L + 1.5; x < L; x += 3) b.box([x - 0.14, -0.95, -W + 0.3], [x + 0.14, -0.25, W - 0.3], MAT.woodDark)
+  for (const s of [-1, 1]) {
+    const [z0, z1] = s < 0 ? [-W - 0.12, -W] : [W, W + 0.12]
+    b.box([-L, -0.3, z0], [L, 0.2, z1], MAT.lacquer, { grain: true, solid: true })
+  }
+  const lanes = kind === "deck2" ? [-2.75, 2.75] : [0]
+  for (const c of lanes) {
+    for (const r of [-1.5, 1.5]) b.box([-L, 0, c + r - 0.06], [L, 0.035, c + r + 0.06], MAT.iron)
+    for (let x = -L + 0.4; x < L; x += 0.8) b.box([x - 0.14, 0, c - 1.8], [x + 0.14, 0.012, c + 1.8], MAT.woodDark)
+  }
+  for (const x of [-6, 6]) {
+    for (const s of [-1, 1]) {
+      const z = s * (W + 0.34)
+      b.box([x - 0.09, -0.7, z - 0.09], [x + 0.09, 2.5, z + 0.09], MAT.lacquer, { grain: true, solid: true })
+      b.box([x - 0.04, 2.38, z], [x + 0.04, 2.46, z + s * 0.62], MAT.woodDark)
+      lantern(b, x, 2.38, z + s * 0.55, 0.85, 0.1)
+      b.light([x, 1.9, z + s * 0.1], WARM)
+    }
+  }
+  // Seen from below: lanterns under the beams, like the rooms' stilts.
+  for (const x of [-L / 2, L / 2]) {
+    lantern(b, x, -1.2, 0, 0.9, 0)
+    b.light([x, -1.9, 0], [0.7, 0.32, 0.14])
+  }
+  return { geometry: b.geometry(), boxes: b.boxes, lights: b.lights.slice(0, MAX_LIGHTS) }
+}
 
+/** A gable roof along x over ±w, from the eaves at y0 up to the ridge at y1. */
+function gable(b: Builder, l: number, w: number, y0: number, y1: number) {
+  const slope = Math.hypot(w, y1 - y0)
+  const uv: [number, number][] = [
+    [0, 0],
+    [2 * l, 0],
+    [2 * l, slope],
+    [0, slope],
+  ]
+  b.quad([-l, y0, w], [l, y0, w], [l, y1, 0], [-l, y1, 0], MAT.roof, uv)
+  b.quad([l, y0, -w], [-l, y0, -w], [-l, y1, 0], [l, y1, 0], MAT.roof, uv)
+  for (const s of [-1, 1]) {
+    const x = s * l
+    if (s > 0) b.quad([x, y0, w], [x, y0, -w], [x, y1, 0], [x, y1, 0], MAT.woodDark)
+    else b.quad([x, y0, -w], [x, y0, w], [x, y1, 0], [x, y1, 0], MAT.woodDark)
+  }
+  b.box([-l - 0.1, y1 - 0.06, -0.14], [l + 0.1, y1 + 0.16, 0.14], MAT.woodDark)
+  b.solid([-l, y0, -w], [l, (y0 + y1) / 2, w])
+}
+
+/**
+ * A building that rides a line. Centred on the origin along x, floor top
+ * at y = 0, at most CAR_HALF across, open at both ends so you can walk
+ * through it, or step aboard as it slides past.
+ */
 export function buildCar(kind: CarKind): Template {
   const b = new Builder()
-  const L = CAR_HALF[kind]
-  const W = kind === "great" ? 5 : kind === "deck" ? 3.6 : 3.2
-  // Bed, beams underneath, and the coupler planks.
-  b.box([-L, -0.7, -W], [L, -0.1, W], MAT.woodDark)
-  b.box([-L, -0.1, -W], [L, 0, W], kind === "carriage" ? MAT.tatami : MAT.woodLight, { grain: true })
-  b.solid([-L, -0.7, -W], [L, 0, W])
-  for (const s of [-1, 1]) {
-    b.box([s > 0 ? L : -L - COUPLER, -0.25, -0.8], [s > 0 ? L + COUPLER : -L, 0, 0.8], MAT.woodLight, { grain: true, solid: true })
-    b.box([-L + 0.4, -1.5, s * (W - 0.8) - 0.2], [L - 0.4, -0.7, s * (W - 0.8) + 0.2], MAT.woodDark, { grain: true })
-  }
-  for (let x = -L + 1.5; x <= L - 1.4; x += (2 * L - 3) / 3) {
-    b.box([x - 0.18, -2.6, -0.18], [x + 0.18, -0.7, 0.18], MAT.woodDark, { grain: true })
-    lantern(b, x, -2.6, 0, 0.9, 0)
-  }
-  // Rails along both sides, so a rider isn't thrown off.
-  const rails = (h = 1.05) => {
+  const l = CAR_LENGTH[kind] / 2
+  const w = CAR_HALF
+  b.box([-l, -0.1, -w], [l, 0, w], MAT.woodLight, { grain: true, solid: true })
+  b.box([-l + 0.3, -0.3, -w + 0.4], [l - 0.3, -0.1, w - 0.4], MAT.woodDark)
+  b.box([-l, -0.12, -w], [l, 0.02, -w + 0.08], MAT.lacquer)
+  b.box([-l, -0.12, w - 0.08], [l, 0.02, w], MAT.lacquer)
+  if (kind === "pavilion") {
+    // Open sides: four red pillars, a rail along each side, lanterns under a gable.
+    for (const x of [-l + 0.2, l - 0.2]) {
+      for (const z of [-w + 0.2, w - 0.2]) b.box([x - 0.16, 0, z - 0.16], [x + 0.16, 3.0, z + 0.16], MAT.lacquer, { grain: true, solid: true })
+    }
     for (const s of [-1, 1]) {
-      const [z0, z1] = s < 0 ? [-W, -W + 0.12] : [W - 0.12, W]
-      b.box([-L, h - 0.12, z0], [L, h, z1], MAT.lacquer, { grain: true })
-      b.solid([-L, 0, z0], [L, h, z1])
-      for (let x = -L; x <= L + 0.01; x += (2 * L) / 6) b.box([x - 0.07, 0, z0 - 0.01], [x + 0.07, h + 0.03, z1 + 0.01], MAT.lacquer, { grain: true })
+      const z = s * (w - 0.12)
+      b.box([-l, 0.88, z - 0.06], [l, 0.98, z + 0.06], MAT.lacquer, { grain: true })
+      b.box([-l, 0.42, z - 0.04], [l, 0.48, z + 0.04], MAT.lacquer)
+      b.solid([-l, 0, z - 0.1], [l, 1.0, z + 0.1])
+      for (let x = -l + 1.5; x < l - 1; x += 1.5) b.box([x - 0.04, 0, z - 0.04], [x + 0.04, 0.9, z + 0.04], MAT.lacquer)
     }
-  }
-
-  if (kind === "deck") {
-    rails()
-    for (const [x, z] of [
-      [-1, -1],
-      [1, -1],
-      [1, 1],
-      [-1, 1],
-    ]) {
-      const px = x * (L - 0.4)
-      const pz = z * (W - 0.4)
-      b.box([px - 0.1, 0, pz - 0.1], [px + 0.1, 2.9, pz + 0.1], MAT.woodDark, { grain: true, solid: true })
-      lantern(b, px, 2.9, pz, 1.2, 0)
-      b.light([px - x * 0.4, 2.2, pz - z * 0.4], WARM)
+    b.box([-l - 0.1, 3.0, -w], [l + 0.1, 3.12, w], MAT.woodDark, { solid: true })
+    gable(b, l + 0.1, w, 3.12, 4.0)
+    for (const x of [-l / 2, l / 2]) {
+      lantern(b, x, 3.0, 0, 1.25, 0.2)
+      b.light([x, 2.2, 0], WARM)
     }
-    // A red parasol over a bench at one end.
-    b.lathe([-L + 2, 0, 0], [[0.06, 0], [0.06, 3.0]], 6, MAT.woodDark)
-    b.lathe([-L + 2, 2.6, 0], [[1.9, 0], [1.2, 0.35], [0, 0.6]], 16, MAT.lantern)
-    b.box([-L + 0.8, 0, -1.4], [-L + 3.2, 0.45, 1.4], MAT.lacquer, { solid: true })
     return { geometry: b.geometry(), boxes: b.boxes, lights: b.lights.slice(0, MAX_LIGHTS) }
   }
-
-  // A hall on wheels: pillars, shoji over a low rail, and a long hipped roof.
-  const H = kind === "great" ? 4.4 : 3.2
-  rails()
-  for (let x = -L; x <= L + 0.01; x += (2 * L) / (kind === "great" ? 8 : 5)) {
-    for (const z of [-W + 0.1, W - 0.1]) b.box([x - 0.14, 0, z - 0.14], [x + 0.14, H, z + 0.14], MAT.woodDark, { grain: true, solid: true })
-  }
+  const tall = kind === "tower"
+  const H = 3.0
+  // Walls of paper over fusuma, posts inside them, noren hung at both ends.
   for (const s of [-1, 1]) {
-    const z0 = s < 0 ? -W + 0.02 : W - 0.1
-    b.box([-L, H - 1.2, z0], [L, H, z0 + 0.08], MAT.shoji)
-    if (kind === "great") {
-      // Fusuma along the lower half, broken by an opening in the middle.
-      b.box([-L, 1.05, z0], [-2, H - 1.2, z0 + 0.08], MAT.fusuma)
-      b.box([2, 1.05, z0], [L, H - 1.2, z0 + 0.08], MAT.fusuma)
-      b.solid([-L, 0, z0], [-2, H, z0 + 0.08])
-      b.solid([2, 0, z0], [L, H, z0 + 0.08])
+    const [z0, z1] = s < 0 ? [-w, -w + 0.12] : [w - 0.12, w]
+    b.box([-l, 0, z0], [l, 0.9, z1], tall ? MAT.fusuma : MAT.woodDark, { grain: !tall })
+    b.box([-l, 0.9, z0], [l, 2.5, z1], MAT.shoji)
+    b.box([-l, 2.5, z0], [l, H, z1], tall ? MAT.shoji : MAT.fusuma)
+    b.solid([-l, 0, z0], [l, H, z1])
+    for (let x = -l; x <= l + 0.01; x += 2) {
+      const zi = s < 0 ? z1 : z0
+      b.box([x - 0.08, 0, Math.min(zi, zi - s * 0.14)], [x + 0.08, H, Math.max(zi, zi - s * 0.14)], MAT.woodDark, { grain: true })
+    }
+    b.box([-l, 2.45, s < 0 ? z1 : z0 - 0.1], [l, 2.55, s < 0 ? z1 + 0.1 : z0], MAT.woodDark)
+  }
+  b.box([-l, H, -w], [l, H + 0.14, w], MAT.woodDark, { solid: true })
+  for (const x of [-l + 0.05, l - 0.05]) {
+    for (let i = 0; i < 4; i++) {
+      const z0 = -w + 0.15 + i * ((2 * w - 0.3) / 4)
+      b.box([x - 0.02, 2.25, z0 + 0.03], [x + 0.02, H, z0 + (2 * w - 0.3) / 4 - 0.03], MAT.lacquer)
     }
   }
-  b.box([-L - 0.3, H, -W - 0.3], [L + 0.3, H + 0.25, W + 0.3], MAT.woodDark)
-  b.solid([-L - 0.3, H, -W - 0.3], [L + 0.3, H + 0.25, W + 0.3])
-  const ridge = H + (kind === "great" ? 2.6 : 1.8)
-  longRoof(b, L + 0.9, W + 0.9, H + 0.25, ridge)
-  if (kind === "great") {
-    // A second, smaller roof tier: the great hall is a pagoda on rails.
-    b.box([-L * 0.55, ridge - 0.9, -W * 0.5], [L * 0.55, ridge + 0.6, W * 0.5], MAT.fusuma)
-    longRoof(b, L * 0.55 + 0.7, W * 0.5 + 0.7, ridge + 0.6, ridge + 2.2)
-    b.box([-0.15, ridge + 2.2, -0.15], [0.15, ridge + 3.4, 0.15], MAT.gold)
+  // Benches along the walls.
+  for (const s of [-1, 1]) b.box([-l + 1, 0, s * (w - 0.55) - 0.3], [l - 1, 0.42, s * (w - 0.55) + 0.3], MAT.woodDark, { solid: true, top: MAT.woodLight })
+  for (const x of [-l / 2, l / 2]) {
+    lantern(b, x, H, 0, 0.9, 0.1)
+    b.light([x, H - 0.8, 0], WARM)
   }
-  b.solid([-L, H + 0.25, -W], [L, ridge - 0.8, W])
-  const n = kind === "great" ? 4 : 3
-  for (let i = 0; i < n; i++) {
-    const x = -L + ((i + 0.5) * 2 * L) / n
-    lantern(b, x, H, 0, kind === "great" ? 1.3 : 1, 0.3)
-    b.light([x, H - 0.9, 0], WARM)
-    for (const z of [-W - 0.5, W + 0.5]) {
-      lantern(b, x, H + 0.1, z, 0.9, 0)
-      if (i % 2 === 0) b.light([x, H - 0.6, z], WARM)
+  if (!tall) {
+    gable(b, l + 0.15, w, H + 0.14, 4.2)
+  } else {
+    // A balcony on the roof and a smaller storey over it, then the gable.
+    const top = H + 0.14
+    for (const s of [-1, 1]) {
+      b.box([-l, top, s * w - 0.12], [l, top + 0.95, s * w], MAT.lacquer, { grain: true })
+    }
+    const ul = l - 1.2
+    const uw = w - 0.6
+    for (const s of [-1, 1]) {
+      b.box([-ul, top, s * uw - 0.07], [ul, top + 2.4, s * uw + 0.07], MAT.shoji, { solid: true })
+      b.box([s * ul - 0.07, top, -uw], [s * ul + 0.07, top + 2.4, uw], MAT.fusuma, { solid: true })
+    }
+    for (const [x, z] of [
+      [-ul, -uw],
+      [ul, -uw],
+      [ul, uw],
+      [-ul, uw],
+    ]) {
+      b.box([x - 0.12, top, z - 0.12], [x + 0.12, top + 2.5, z + 0.12], MAT.woodDark, { grain: true })
+    }
+    b.box([-ul - 0.2, top + 2.4, -uw - 0.2], [ul + 0.2, top + 2.55, uw + 0.2], MAT.woodDark)
+    gable(b, ul + 0.3, w, top + 2.55, 7.6)
+    for (const x of [-l + 0.5, l - 0.5]) {
+      lantern(b, x, top + 1.9, 0, 1.0, 0.3)
+      b.light([x, top + 1.3, 0], [1.0, 0.42, 0.18])
     }
   }
   return { geometry: b.geometry(), boxes: b.boxes, lights: b.lights.slice(0, MAX_LIGHTS) }
 }
 
-/** A hipped roof over a long rectangle: half-length `l`, half-width `w`. */
-function longRoof(b: Builder, l: number, w: number, y0: number, y1: number) {
-  const cl = Math.max(0.6, l - w)
-  const s = Math.hypot(w, y1 - y0)
-  const uv = (a: number): [number, number][] => [
-    [-a, 0],
-    [a, 0],
-    [a * 0.4, s],
-    [-a * 0.4, s],
-  ]
-  b.quad([-l, y0, w], [l, y0, w], [cl, y1, 0], [-cl, y1, 0], MAT.roof, uv(l))
-  b.quad([l, y0, -w], [-l, y0, -w], [-cl, y1, 0], [cl, y1, 0], MAT.roof, uv(l))
-  b.quad([l, y0, w], [l, y0, -w], [cl, y1, 0], [cl, y1, 0], MAT.roof, uv(w))
-  b.quad([-l, y0, -w], [-l, y0, w], [-cl, y1, 0], [-cl, y1, 0], MAT.roof, uv(w))
-  b.box([-cl - 0.1, y1 - 0.05, -0.16], [cl + 0.1, y1 + 0.2, 0.16], MAT.roof)
-  for (const [x, z] of [
-    [-1, -1],
-    [1, -1],
-    [1, 1],
-    [-1, 1],
-  ]) {
-    b.box([x * l - 0.22, y0 - 0.05, z * w - 0.22], [x * l + 0.22, y0 + 0.2, z * w + 0.22], MAT.woodDark)
+/**
+ * A great hall: thirty metres of tatami under a forest of lacquered
+ * pillars, two tiers of walls (fusuma, then glowing shoji above a
+ * balcony), a ceiling of coffers hung with great lanterns, and a dais with
+ * a gold screen at the back. The upright one takes its line through a gate
+ * in its +z wall. The turned one's line lies along its −z wall and comes
+ * in through a slot in the ceiling, so that wall must stay clear.
+ */
+export function buildGreatHall(turned: boolean): Template {
+  const b = new Builder()
+  const R = GREAT_R
+  const H = GREAT_H
+  const T = 0.4
+  const gate = { half: 3.8, height: 6.8 }
+  // Lane clear of everything: across the gate (upright) or along the line's wall (turned).
+  const laneHalf = 4.6
+
+  b.box([-R - T, -0.6, -R - T], [R + T, -0.1, R + T], MAT.woodDark)
+  b.box([-R, -0.1, -R], [R, 0, R], MAT.tatami)
+  b.solid([-R - T, -0.6, -R - T], [R + T, 0, R + T])
+  if (!turned) for (const r of [-1.5, 1.5]) b.box([r - 0.06, 0, -9], [r + 0.06, 0.035, R], MAT.iron)
+
+  // Walls: d = 1 is +z (the gate), d = 3 is −z (the turned hall's line).
+  for (let d = 0; d < 4; d++) {
+    const hasGate = !turned && d === 1
+    const plain = turned && d === 3
+    b.frame(d, [0, 0, 0], () => {
+      const band = (y0: number, y1: number, mat: number) => {
+        const cut = hasGate && y0 < gate.height
+        const spans: [number, number][] = cut
+          ? [
+              [-R, -gate.half],
+              [gate.half, R + T],
+            ]
+          : [[-R, R + T]]
+        for (const [z0, z1] of spans) b.box([R, y0, z0], [R + T, y1, z1], mat)
+        if (cut && y1 > gate.height) b.box([R, gate.height, -gate.half], [R + T, y1, gate.half], mat)
+      }
+      band(0, 0.5, MAT.woodDark)
+      band(0.5, 6.4, MAT.fusuma)
+      band(6.4, 7.0, MAT.woodDark)
+      band(7.0, 13.4, MAT.shoji)
+      band(13.4, H, MAT.woodDark)
+      if (hasGate) {
+        b.solid([R, 0, -R], [R + T, H, -gate.half])
+        b.solid([R, 0, gate.half], [R + T, H, R + T])
+        b.solid([R, gate.height, -gate.half], [R + T, H, gate.half])
+        // A torii-like frame outside the gate.
+        for (const z of [-gate.half - 0.5, gate.half + 0.5]) b.box([R + T, 0, z - 0.3], [R + T + 0.6, 8.2, z + 0.3], MAT.lacquer, { grain: true, solid: true })
+        b.box([R + T - 0.1, 7.4, -gate.half - 1.8], [R + T + 0.7, 7.9, gate.half + 1.8], MAT.lacquer, { grain: true })
+        b.box([R + T - 0.2, 8.2, -gate.half - 2.4], [R + T + 0.8, 8.6, gate.half + 2.4], MAT.woodDark)
+      } else {
+        b.solid([R, 0, -R], [R + T, H, R + T])
+      }
+      // Posts on the inner face, a balcony round the upper tier.
+      for (let z = -12.5; z <= 12.5; z += 5) {
+        if (plain && Math.abs(z) < laneHalf) continue
+        if (hasGate && Math.abs(z) < gate.half + 0.5) continue
+        b.box([R - 0.22, 0, z - 0.2], [R, H, z + 0.2], MAT.woodDark, { grain: true })
+      }
+      const balcony = (z0: number, z1: number) => {
+        b.box([R - 2.2, 6.7, z0], [R, 7.0, z1], MAT.woodLight, { grain: true, solid: true })
+        b.box([R - 2.2, 7.0, z0], [R - 2.1, 8.0, z1], MAT.lacquer, { grain: true, solid: true })
+        b.box([R - 2.2, 7.85, z0], [R - 2.06, 7.98, z1], MAT.lacquer)
+      }
+      if (plain) {
+        balcony(-R + 2.2, -laneHalf)
+        balcony(laneHalf, R - 2.2)
+      } else {
+        balcony(-R + 2.2, R - 2.2)
+      }
+      for (const z of [-7.5, 7.5]) {
+        lantern(b, R - 0.7, 4.8, z, 1.3, 0.4)
+        b.light([R - 1.2, 4.1, z], WARM)
+      }
+    })
   }
+
+  // The pillars, clear of the lane.
+  for (const x of [-11, -6.5, 6.5, 11]) {
+    for (const z of [-10.5, -3.5, 3.5, 10.5]) {
+      b.box([x - 0.45, 0, z - 0.45], [x + 0.45, 0.4, z + 0.45], MAT.plaster)
+      b.box([x - 0.35, 0.4, z - 0.35], [x + 0.35, H, z + 0.35], MAT.lacquer, { grain: true })
+      for (const y of [6.4, 12.2]) b.box([x - 0.38, y, z - 0.38], [x + 0.38, y + 0.25, z + 0.38], MAT.gold)
+      b.solid([x - 0.45, 0, z - 0.45], [x + 0.45, H, z + 0.45])
+    }
+  }
+
+  // Ceiling: coffers and great lanterns. The turned hall leaves a slot for its line.
+  const slot = { x: 3.9, z: -8.6 }
+  const slab = (x0: number, z0: number, x1: number, z1: number) => {
+    b.box([x0, H, z0], [x1, H + 0.5, z1], MAT.woodDark)
+    b.solid([x0, H, z0], [x1, H + 0.5, z1])
+  }
+  if (turned) {
+    slab(-R - T, -R - T, -slot.x, R + T)
+    slab(slot.x, -R - T, R + T, R + T)
+    slab(-slot.x, slot.z, slot.x, R + T)
+  } else {
+    slab(-R - T, -R - T, R + T, R + T)
+  }
+  for (let k = -10; k <= 10; k += 5) {
+    const inSlot = (x: number, z: number) => turned && Math.abs(x) < slot.x && z < slot.z
+    // Beams along x at z = k, and along z at x = k, broken round the slot.
+    const xs: [number, number][] = inSlot(0, k) ? [[-R, -slot.x], [slot.x, R]] : [[-R, R]]
+    for (const [x0, x1] of xs) b.box([x0, H - 0.4, k - 0.15], [x1, H, k + 0.15], MAT.woodDark, { grain: true })
+    const z0 = inSlot(k, -R) ? slot.z : -R
+    b.box([k - 0.15, H - 0.4, z0], [k + 0.15, H, R], MAT.woodDark, { grain: true })
+  }
+  for (const x of [-8, 0, 8]) {
+    for (const z of [-8, 0, 8]) {
+      lantern(b, x, 11.4, z, 2.0, H - 11.4)
+      b.light([x, 10.6, z], x === 0 && z === 0 ? [1.0, 0.62, 0.3] : WARM)
+    }
+  }
+
+  // The dais and its gold screen, across from where the line comes in.
+  const back = turned ? 1 : -1
+  const dz0 = back < 0 ? -R : R - 4.5
+  const dz1 = back < 0 ? -R + 4.5 : R
+  b.box([-9, 0, dz0], [9, 0.6, dz1], MAT.woodDark, { solid: true, top: MAT.tatami })
+  // Steps down from its front edge.
+  for (let i = 0; i < 3; i++) {
+    const [z0, z1] = back < 0 ? [dz1 + i * 0.4, dz1 + (i + 1) * 0.4] : [dz0 - (i + 1) * 0.4, dz0 - i * 0.4]
+    b.box([-3, 0, z0], [3, 0.6 - (i + 1) * 0.15, z1], MAT.woodDark, { solid: true, top: MAT.woodLight })
+  }
+  const sz = back < 0 ? -R + 0.6 : R - 0.6
+  for (let i = 0; i < 6; i++) {
+    const x0 = -7.5 + i * 2.5
+    const x1 = x0 + 2.5
+    const za = sz + (i % 2 ? 0.35 : 0) * -back
+    const zb = sz + (i % 2 ? 0 : 0.35) * -back
+    const q: [Vec3, Vec3, Vec3, Vec3] = [
+      [x0, 0.6, za],
+      [x1, 0.6, zb],
+      [x1, 3.6, zb],
+      [x0, 3.6, za],
+    ]
+    if (back < 0) b.quad(q[0], q[1], q[2], q[3], MAT.fusuma)
+    else b.quad(q[1], q[0], q[3], q[2], MAT.fusuma)
+  }
+  for (const x of [-7.5, 7.5]) {
+    const z = back < 0 ? -R + 3 : R - 3
+    b.box([x - 0.35, 0.6, z - 0.35], [x + 0.35, 1.9, z + 0.35], MAT.shoji)
+    b.box([x - 0.42, 1.9, z - 0.42], [x + 0.42, 2.0, z + 0.42], MAT.woodDark)
+    b.light([x, 1.5, z + back * -0.8], [1.0, 0.6, 0.3])
+  }
+
+  if (!turned) roof(b, R + T + 1.2, H + 0.5, 3.2, H + 8.5)
+  return { geometry: b.geometry(), boxes: b.boxes, lights: b.lights.slice(0, MAX_LIGHTS) }
 }
