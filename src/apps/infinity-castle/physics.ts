@@ -38,6 +38,8 @@ export type Body = {
   grounded: boolean
   /** Owner of the box stood on, or -1. */
   ground: number
+  /** Overrides BODY.terminal: a slower, longer fall. */
+  terminal?: number
 }
 
 export type StepResult = {
@@ -112,7 +114,8 @@ export function step(body: Body, boxes: readonly Box[], wish: Vec3, jump: boolea
 
   // Gravity, capped at a falling speed that still feels like falling.
   body.vel[u] -= sign * BODY.gravity * dt
-  if (sign * body.vel[u] < -BODY.terminal) body.vel[u] = -sign * BODY.terminal
+  const terminal = body.terminal ?? BODY.terminal
+  if (sign * body.vel[u] < -terminal) body.vel[u] = -sign * terminal
 
   // Steering: snappy on the floor, a little in the air.
   const accel = (wasGrounded ? 60 : 14) * dt

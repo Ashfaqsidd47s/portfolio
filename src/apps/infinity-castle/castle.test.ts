@@ -92,4 +92,38 @@ describe("Castle", () => {
       expect(below).toBe(true)
     }
   })
+
+  it("has open-air terraces among its rooms", () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const castle = new Castle(seed)
+      expect([...castle.rooms.values()].some((r) => r.kind === "terrace")).toBe(true)
+    }
+  })
+
+  it("slides a room it's told to first, even a locked one, and stays connected", () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const castle = new Castle(seed)
+      const entry = castle.rooms.get(castle.entryRoom())!
+      const [x, k, z] = entry.node
+      const below = [...castle.rooms.values()].find((r) => r.node[0] === x && r.node[2] === z && r.node[1] < k)!
+      const avoid = (n: [number, number, number]) => (n[0] === x && n[2] === z) || n[1] >= k
+      const plan = castle.shift({ lockedRooms: new Set([entry.id, below.id]), first: [{ id: below.id, avoid }], count: 1 })
+      expect(castle.isConnected()).toBe(true)
+      const move = plan.moves.find((m) => m.id === below.id)
+      if (move) expect(avoid(move.to)).toBe(false)
+      expect(castle.rooms.get(entry.id)!.node).toEqual([x, k, z])
+    }
+  })
+
+  it("brings a room to a given node", () => {
+    const castle = new Castle(4)
+    const room = [...castle.rooms.values()].find((r) => r.kind === "terrace")!
+    const to = castle.inBounds([room.node[0] + 1, room.node[1], room.node[2]])
+      ? ([room.node[0] + 1, room.node[1], room.node[2]] as [number, number, number])
+      : ([room.node[0] - 1, room.node[1], room.node[2]] as [number, number, number])
+    if (castle.roomAt(to)) return
+    const plan = castle.shift({ first: [{ id: room.id, to }], count: 1 })
+    if (plan.moves.length) expect(castle.rooms.get(room.id)!.node).toEqual(to)
+    expect(castle.isConnected()).toBe(true)
+  })
 })

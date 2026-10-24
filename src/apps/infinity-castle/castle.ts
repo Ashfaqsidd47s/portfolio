@@ -42,8 +42,10 @@ export const DIRS: readonly [number, number][] = [
 export const opposite = (d: Dir) => ((d + 2) % 4) as Dir
 
 export type Landmark = "kokushibo" | "doma" | "akaza"
-export type RoomKind = "hall" | Landmark | "nakime"
+/** A hall has walls, a roof and a trapdoor; a terrace is an open-air stage. */
+export type RoomKind = "hall" | "terrace" | Landmark | "nakime"
 export const LANDMARKS: readonly Landmark[] = ["kokushibo", "doma", "akaza"]
+export const isLandmark = (kind: RoomKind): kind is Landmark => (LANDMARKS as readonly string[]).includes(kind)
 
 export type Room = { id: number; kind: RoomKind; node: Node; variant: number }
 
@@ -70,8 +72,13 @@ export type ShiftOptions = {
   lockedEdges?: ReadonlySet<string>
   /** Reject a slide, e.g. one whose path or destination crosses the player. */
   blocked?: (from: Node, to: Node) => boolean
-  /** How many rooms to slide. */
+  /** How many rooms to slide in all. */
   count?: number
+  /**
+   * Rooms to slide before any others, even if they're locked: to a given
+   * node, or anywhere `avoid` allows. `blocked` doesn't apply to them.
+   */
+  first?: { id: number; to?: Node; avoid?: (n: Node) => boolean }[]
 }
 
 export const nodeKey = (n: Node) => `${n[0]},${n[1]},${n[2]}`
@@ -266,6 +273,8 @@ export class Castle {
       }
     }
     this.placeLandmarks(placed)
+    // Some of the plain rooms are open-air stages instead of halls.
+    for (const r of placed) if (r.kind === "hall" && this.rng.chance(0.24)) r.kind = "terrace"
   }
 
   /** Upper One lives deepest, Upper Three highest, each far from the others. */
@@ -311,7 +320,8 @@ export class Castle {
     return seen.size === rooms.length
   }
 
-  private touchesMaze(n: Node, self: Room) {
+  /** A room at `n` would have a neighbour to join (other than itself). */
+  touchesMaze(n: Node, self: Room) {
     return this.candidateNeighbours(n).some((m) => {
       const q = this.roomAt(m)
       return q && q !== self && (q.kind !== "nakime" || this.nakimeOpen)
@@ -336,16 +346,21 @@ export class Castle {
     const count = opts.count ?? 4
     // Rooms at either end of a locked passage can't move either.
     const pinned = new Set(lockedRooms)
+    // Rooms that must stay whatever `first` says: ends of a locked passage, Nakime's feet.
+    const held = new Set<number>()
     for (const key of lockedEdges) {
       const e = this.edges.get(key)
-      if (e) pinned.add(e.a).add(e.b)
+      if (e) {
+        pinned.add(e.a).add(e.b)
+        held.add(e.a).add(e.b)
+      }
     }
 
     const moves: Move[] = []
     const movable = [...this.rooms.values()].filter((r) => r.kind !== "nakime" && !pinned.has(r.id))
     this.shuffle(movable)
 
-    const tryMove = (room: Room, targets: Node[]) => {
+    const tryMove = (room: Room, targets: Node[], check = blocked) => {
       const from = room.node
       this.byNode.delete(nodeKey(from))
       // Nakime hangs off the maze by the rooms at her feet, which are pinned.
@@ -355,7 +370,7 @@ export class Castle {
         return false
       }
       const options = targets.filter(
-        (n) => !this.roomAt(n) && !sameNode(n, from) && this.touchesMaze(n, room) && !blocked(from, n)
+        (n) => !this.roomAt(n) && !sameNode(n, from) && this.touchesMaze(n, room) && !check(from, n)
       )
       this.byNode.set(nodeKey(from), room.id)
       if (!options.length) return false
@@ -377,15 +392,23 @@ export class Castle {
       }
       for (const n of feet) {
         const r = this.roomAt(n)
-        if (r) pinned.add(r.id)
+        if (r) {
+          pinned.add(r.id)
+          held.add(r.id)
+        }
       }
     }
 
     const all = this.allNodes()
+    for (const f of opts.first ?? []) {
+      const room = this.rooms.get(f.id)
+      if (!room || room.kind === "nakime" || held.has(room.id) || moves.some((m) => m.id === room.id)) continue
+      if (tryMove(room, f.to ? [f.to] : this.shuffle(all.filter((n) => !f.avoid?.(n))), () => false)) pinned.add(room.id)
+    }
     for (const room of movable) {
       if (moves.length >= count) break
       if (pinned.has(room.id) || moves.some((m) => m.id === room.id)) continue
-      if (room.kind !== "hall" && !this.rng.chance(0.3)) continue
+      if (isLandmark(room.kind) && !this.rng.chance(0.3)) continue
       tryMove(room, this.shuffle(all.slice()))
     }
 

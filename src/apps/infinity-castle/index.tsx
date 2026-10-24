@@ -398,7 +398,8 @@ export default function InfinityCastle({ isPhone, isFocused, isVisible }: AppPro
           <p className="mt-5 max-w-md text-sm leading-relaxed text-[#f3e3c6]/75">
             Rooms of tatami and sliding doors hang in a bottomless dark. Every few dozen steps Nakime strums her
             biwa, and the castle rearranges itself: rooms slide, stairs fold away, floors open, gravity turns.
-            Follow the scent to the three Upper Moons&rsquo; rooms, then climb to her.
+            Fall through and you may keep falling a long time. Follow the scent to the three Upper
+            Moons&rsquo; rooms, then climb to her.
           </p>
           <button
             type="button"

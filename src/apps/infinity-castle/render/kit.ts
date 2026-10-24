@@ -1,5 +1,8 @@
 import type * as THREE from "three"
 import { LEVEL, ROOM_R, SPAN, STAIR_LANE, type EdgeStyle, type RoomKind, type Vec3 } from "../castle"
+
+/** Buildings that never stop: carriages of the halls that run like trains. */
+export type CarKind = "carriage" | "deck" | "great"
 import { Builder, MAT, type Light, type LocalBox } from "./builder"
 
 /**
@@ -225,6 +228,10 @@ export function buildRoom(kind: RoomKind): Template {
       platform(b, { trap: true, floor: MAT.tatami })
       shell(b, { wall: MAT.fusuma, transom: MAT.shoji, doors: MAT.fusuma, lightColor: WARM, inner: INNER })
       break
+    case "terrace":
+      platform(b, { trap: false, floor: MAT.woodLight })
+      terrace(b)
+      break
     case "akaza":
       akaza(b)
       break
@@ -245,6 +252,37 @@ export function buildRoom(kind: RoomKind): Template {
       break
   }
   return { geometry: b.geometry(), boxes: b.boxes, lights: b.lights.slice(0, MAX_LIGHTS) }
+}
+
+/**
+ * An open-air stage: no walls or roof, so it's somewhere to land. Lantern
+ * posts at the corners and a torii across the middle.
+ */
+function terrace(b: Builder) {
+  const P = R - 0.45
+  for (const [x, z] of [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ]) {
+    b.box([x * P - 0.12, 0, z * P - 0.12], [x * P + 0.12, 2.8, z * P + 0.12], MAT.woodDark, { grain: true, solid: true })
+    b.box([x * P - 0.04, 2.7, z * (P - 0.6)], [x * P + 0.04, 2.78, z * P], MAT.woodDark)
+    lantern(b, x * P, 2.7, z * (P - 0.6), 1.1, 0.1)
+    b.light([x * (P - 0.3), 2.1, z * (P - 0.9)], WARM)
+  }
+  // The torii: two red pillars, a tie beam and the upswept lintel.
+  for (const z of [-3.1, 3.1]) {
+    b.lathe([0, 0, z], [[0.24, 0], [0.2, 4.6]], 10, MAT.lacquer)
+    b.box([-0.3, 0, z - 0.3], [0.3, 0.3, z + 0.3], MAT.woodDark)
+    b.solid([-0.24, 0, z - 0.24], [0.24, 4.6, z + 0.24])
+  }
+  b.box([-0.14, 3.9, -3.7], [0.14, 4.15, 3.7], MAT.lacquer, { grain: true })
+  b.box([-0.22, 4.6, -4.3], [0.22, 4.85, 4.3], MAT.lacquer, { grain: true })
+  b.box([-0.26, 4.85, -4.5], [0.26, 5.0, 4.5], MAT.woodDark)
+  b.box([-0.08, 4.15, -0.3], [0.08, 4.6, 0.3], MAT.plaster)
+  b.light([0, 3.6, 0], [1.0, 0.4, 0.25])
+  for (let d = 0; d < 4; d++) b.frame(d, [0, 0, 0], () => rail(b, d))
 }
 
 /**
@@ -508,4 +546,124 @@ function sloped(b: Builder, za: number, zb: number, y0: number, y1: number, mat:
     ],
     mat
   )
+}
+
+// ── Carriages ────────────────────────────────────────────────────────────
+
+/** Half-length of each carriage along its run (+x), not counting couplers. */
+export const CAR_HALF: Record<CarKind, number> = { carriage: 7, deck: 5, great: 10 }
+/** The plank each carriage puts out at both ends, to its neighbour. */
+export const COUPLER = 0.9
+
+export function buildCar(kind: CarKind): Template {
+  const b = new Builder()
+  const L = CAR_HALF[kind]
+  const W = kind === "great" ? 5 : kind === "deck" ? 3.6 : 3.2
+  // Bed, beams underneath, and the coupler planks.
+  b.box([-L, -0.7, -W], [L, -0.1, W], MAT.woodDark)
+  b.box([-L, -0.1, -W], [L, 0, W], kind === "carriage" ? MAT.tatami : MAT.woodLight, { grain: true })
+  b.solid([-L, -0.7, -W], [L, 0, W])
+  for (const s of [-1, 1]) {
+    b.box([s > 0 ? L : -L - COUPLER, -0.25, -0.8], [s > 0 ? L + COUPLER : -L, 0, 0.8], MAT.woodLight, { grain: true, solid: true })
+    b.box([-L + 0.4, -1.5, s * (W - 0.8) - 0.2], [L - 0.4, -0.7, s * (W - 0.8) + 0.2], MAT.woodDark, { grain: true })
+  }
+  for (let x = -L + 1.5; x <= L - 1.4; x += (2 * L - 3) / 3) {
+    b.box([x - 0.18, -2.6, -0.18], [x + 0.18, -0.7, 0.18], MAT.woodDark, { grain: true })
+    lantern(b, x, -2.6, 0, 0.9, 0)
+  }
+  // Rails along both sides, so a rider isn't thrown off.
+  const rails = (h = 1.05) => {
+    for (const s of [-1, 1]) {
+      const [z0, z1] = s < 0 ? [-W, -W + 0.12] : [W - 0.12, W]
+      b.box([-L, h - 0.12, z0], [L, h, z1], MAT.lacquer, { grain: true })
+      b.solid([-L, 0, z0], [L, h, z1])
+      for (let x = -L; x <= L + 0.01; x += (2 * L) / 6) b.box([x - 0.07, 0, z0 - 0.01], [x + 0.07, h + 0.03, z1 + 0.01], MAT.lacquer, { grain: true })
+    }
+  }
+
+  if (kind === "deck") {
+    rails()
+    for (const [x, z] of [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ]) {
+      const px = x * (L - 0.4)
+      const pz = z * (W - 0.4)
+      b.box([px - 0.1, 0, pz - 0.1], [px + 0.1, 2.9, pz + 0.1], MAT.woodDark, { grain: true, solid: true })
+      lantern(b, px, 2.9, pz, 1.2, 0)
+      b.light([px - x * 0.4, 2.2, pz - z * 0.4], WARM)
+    }
+    // A red parasol over a bench at one end.
+    b.lathe([-L + 2, 0, 0], [[0.06, 0], [0.06, 3.0]], 6, MAT.woodDark)
+    b.lathe([-L + 2, 2.6, 0], [[1.9, 0], [1.2, 0.35], [0, 0.6]], 16, MAT.lantern)
+    b.box([-L + 0.8, 0, -1.4], [-L + 3.2, 0.45, 1.4], MAT.lacquer, { solid: true })
+    return { geometry: b.geometry(), boxes: b.boxes, lights: b.lights.slice(0, MAX_LIGHTS) }
+  }
+
+  // A hall on wheels: pillars, shoji over a low rail, and a long hipped roof.
+  const H = kind === "great" ? 4.4 : 3.2
+  rails()
+  for (let x = -L; x <= L + 0.01; x += (2 * L) / (kind === "great" ? 8 : 5)) {
+    for (const z of [-W + 0.1, W - 0.1]) b.box([x - 0.14, 0, z - 0.14], [x + 0.14, H, z + 0.14], MAT.woodDark, { grain: true, solid: true })
+  }
+  for (const s of [-1, 1]) {
+    const z0 = s < 0 ? -W + 0.02 : W - 0.1
+    b.box([-L, H - 1.2, z0], [L, H, z0 + 0.08], MAT.shoji)
+    if (kind === "great") {
+      // Fusuma along the lower half, broken by an opening in the middle.
+      b.box([-L, 1.05, z0], [-2, H - 1.2, z0 + 0.08], MAT.fusuma)
+      b.box([2, 1.05, z0], [L, H - 1.2, z0 + 0.08], MAT.fusuma)
+      b.solid([-L, 0, z0], [-2, H, z0 + 0.08])
+      b.solid([2, 0, z0], [L, H, z0 + 0.08])
+    }
+  }
+  b.box([-L - 0.3, H, -W - 0.3], [L + 0.3, H + 0.25, W + 0.3], MAT.woodDark)
+  b.solid([-L - 0.3, H, -W - 0.3], [L + 0.3, H + 0.25, W + 0.3])
+  const ridge = H + (kind === "great" ? 2.6 : 1.8)
+  longRoof(b, L + 0.9, W + 0.9, H + 0.25, ridge)
+  if (kind === "great") {
+    // A second, smaller roof tier: the great hall is a pagoda on rails.
+    b.box([-L * 0.55, ridge - 0.9, -W * 0.5], [L * 0.55, ridge + 0.6, W * 0.5], MAT.fusuma)
+    longRoof(b, L * 0.55 + 0.7, W * 0.5 + 0.7, ridge + 0.6, ridge + 2.2)
+    b.box([-0.15, ridge + 2.2, -0.15], [0.15, ridge + 3.4, 0.15], MAT.gold)
+  }
+  b.solid([-L, H + 0.25, -W], [L, ridge - 0.8, W])
+  const n = kind === "great" ? 4 : 3
+  for (let i = 0; i < n; i++) {
+    const x = -L + ((i + 0.5) * 2 * L) / n
+    lantern(b, x, H, 0, kind === "great" ? 1.3 : 1, 0.3)
+    b.light([x, H - 0.9, 0], WARM)
+    for (const z of [-W - 0.5, W + 0.5]) {
+      lantern(b, x, H + 0.1, z, 0.9, 0)
+      if (i % 2 === 0) b.light([x, H - 0.6, z], WARM)
+    }
+  }
+  return { geometry: b.geometry(), boxes: b.boxes, lights: b.lights.slice(0, MAX_LIGHTS) }
+}
+
+/** A hipped roof over a long rectangle: half-length `l`, half-width `w`. */
+function longRoof(b: Builder, l: number, w: number, y0: number, y1: number) {
+  const cl = Math.max(0.6, l - w)
+  const s = Math.hypot(w, y1 - y0)
+  const uv = (a: number): [number, number][] => [
+    [-a, 0],
+    [a, 0],
+    [a * 0.4, s],
+    [-a * 0.4, s],
+  ]
+  b.quad([-l, y0, w], [l, y0, w], [cl, y1, 0], [-cl, y1, 0], MAT.roof, uv(l))
+  b.quad([l, y0, -w], [-l, y0, -w], [-cl, y1, 0], [cl, y1, 0], MAT.roof, uv(l))
+  b.quad([l, y0, w], [l, y0, -w], [cl, y1, 0], [cl, y1, 0], MAT.roof, uv(w))
+  b.quad([-l, y0, -w], [-l, y0, w], [-cl, y1, 0], [-cl, y1, 0], MAT.roof, uv(w))
+  b.box([-cl - 0.1, y1 - 0.05, -0.16], [cl + 0.1, y1 + 0.2, 0.16], MAT.roof)
+  for (const [x, z] of [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ]) {
+    b.box([x * l - 0.22, y0 - 0.05, z * w - 0.22], [x * l + 0.22, y0 + 0.2, z * w + 0.22], MAT.woodDark)
+  }
 }

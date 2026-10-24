@@ -1,4 +1,5 @@
 import {
+  CELL,
   Castle,
   DIRS,
   LEVEL,
@@ -15,7 +16,7 @@ import {
 } from "./castle"
 import type { Box } from "./physics"
 import { turn } from "./render/builder"
-import { PART_COUNT, TRAP_PART, WALL, doorPart, gatePart, type Template } from "./render/kit"
+import { CAR_HALF, COUPLER, PART_COUNT, TRAP_PART, WALL, doorPart, gatePart, type CarKind, type Template } from "./render/kit"
 
 /**
  * The castle in motion. Each room and passage is a block with a live
@@ -25,7 +26,22 @@ import { PART_COUNT, TRAP_PART, WALL, doorPart, gatePart, type Template } from "
  * them, so what you see is what you stand on.
  */
 
-export type TemplateKey = RoomKind | EdgeStyle
+export type TemplateKey = RoomKind | EdgeStyle | CarKind
+
+/**
+ * A train of halls that never stops: it runs a straight track round the
+ * outside of the lattice, out into the fog and back in at the far end.
+ */
+export type Train = {
+  /** Where the track starts; it runs `length` metres along `dir`. */
+  from: Vec3
+  dir: Vec3
+  length: number
+  speed: number
+  /** How far along the track the lead carriage is. */
+  s: number
+  cars: { block: Block; behind: number }[]
+}
 
 export type Block = {
   key: string
@@ -34,6 +50,8 @@ export type Block = {
   template: TemplateKey
   room?: Room
   edge?: Edge
+  /** A carriage: the train it belongs to. */
+  train?: Train
   pos: Vec3
   /** Quarter turns about +y (passages run along their room's side). */
   q: number
@@ -90,6 +108,8 @@ export class World {
   private tweens: Tween[] = []
   private clock = 0
   private nextEdgeOwner = 100000
+  private nextCarOwner = 200000
+  readonly trains: Train[] = []
 
   constructor(castle: Castle, templates: Map<TemplateKey, Template>) {
     this.castle = castle
@@ -97,6 +117,66 @@ export class World {
     for (const room of castle.rooms.values()) this.addRoom(room)
     for (const edge of castle.edges.values()) this.addEdge(edge, 1)
     this.settleOpenings()
+    this.layTracks()
+  }
+
+  /**
+   * Four tracks, one along each side of the castle just outside the
+   * lattice, each at its own height so they cross without meeting. Two
+   * trains on each, half a track apart.
+   */
+  private layTracks() {
+    const { x, z } = this.castle.size
+    const out = 7 * CELL
+    const tracks: { from: Vec3; dir: Vec3; length: number }[] = [
+      { from: [-CELL, LEVEL, -out], dir: [0, 0, 1], length: (z - 1) * CELL + 2 * out },
+      { from: [x * CELL, 4 * LEVEL, (z - 1) * CELL + out], dir: [0, 0, -1], length: (z - 1) * CELL + 2 * out },
+      { from: [(x - 1) * CELL + out, 2.6 * LEVEL, -CELL], dir: [-1, 0, 0], length: (x - 1) * CELL + 2 * out },
+      { from: [-out, 5.2 * LEVEL, z * CELL], dir: [1, 0, 0], length: (x - 1) * CELL + 2 * out },
+    ]
+    for (const t of tracks) {
+      const speed = 6.5 + Math.random() * 3.5
+      for (let k = 0; k < 2; k++) {
+        const train: Train = { ...t, speed, s: (k + Math.random() * 0.3) * (t.length / 2), cars: [] }
+        const count = 4 + Math.floor(Math.random() * 3)
+        let behind = 0
+        for (let i = 0; i < count; i++) {
+          const kind: CarKind = i === 1 && Math.random() < 0.7 ? "great" : i % 2 === 0 ? "deck" : "carriage"
+          behind += i === 0 ? 0 : CAR_HALF[kind]
+          const block: Block = {
+            key: `t${this.trains.length}:${i}`,
+            owner: this.nextCarOwner++,
+            template: kind,
+            train,
+            pos: [...t.from],
+            q: t.dir[0] > 0 ? 0 : t.dir[2] > 0 ? 1 : t.dir[0] < 0 ? 2 : 3,
+            extend: 1,
+            open: new Float32Array(PART_COUNT),
+            dying: false,
+            seed: Math.random(),
+          }
+          train.cars.push({ block, behind })
+          this.blocks.set(block.key, block)
+          behind += CAR_HALF[kind] + 2 * COUPLER
+        }
+        this.trains.push(train)
+        this.runTrain(train, 0)
+      }
+    }
+  }
+
+  private runTrain(train: Train, dt: number) {
+    train.s = (train.s + train.speed * dt) % train.length
+    for (const { block, behind } of train.cars) {
+      const d = (((train.s - behind) % train.length) + train.length) % train.length
+      block.pos = [train.from[0] + train.dir[0] * d, train.from[1], train.from[2] + train.dir[2] * d]
+    }
+  }
+
+  /** How fast a block is moving on its own (only carriages do). */
+  velocity(block: Block): Vec3 {
+    const t = block.train
+    return t ? [t.dir[0] * t.speed, 0, t.dir[2] * t.speed] : [0, 0, 0]
   }
 
   get time() {
@@ -193,17 +273,22 @@ export class World {
    * passages fold away, rooms slide to their new nodes, and new passages
    * unfold once both of their rooms have arrived. Returns its length.
    */
-  play(plan: ShiftPlan, opts: { cascadeFrom?: Vec3; still?: ReadonlySet<number> } = {}): number {
+  play(
+    plan: ShiftPlan,
+    opts: { cascadeFrom?: Vec3; still?: ReadonlySet<number>; tempo?: number } = {}
+  ): { length: number; arrive: Map<number, number> } {
+    // Below 1, the whole strum plays faster.
+    const k = opts.tempo ?? 1
     const rnd = () => Math.random()
     const arrive = new Map<number, number>()
-    let end = 1
+    let end = k
 
     for (const e of plan.removed) {
       const block = this.blocks.get(`e${e.key}`)
       if (!block) continue
       block.dying = true
-      const at = 0.25 + rnd() * 0.2
-      this.tween({ block, prop: "extend", from: 1, to: 0, at, dur: 0.55, ease: easeIn, done: () => this.blocks.delete(block.key) })
+      const at = (0.25 + rnd() * 0.2) * k
+      this.tween({ block, prop: "extend", from: 1, to: 0, at, dur: 0.55 * k, ease: easeIn, done: () => this.blocks.delete(block.key) })
     }
 
     // Doors first: whatever loses its passage slams shut.
@@ -212,32 +297,32 @@ export class World {
       const want = this.wanted(room)
       for (let p = 1; p < PART_COUNT; p++) {
         if (p === TRAP_PART) continue
-        if (want[p] < 0.5 && block.open[p] > 0.5) this.setPart(block, p, 0, 0.05 + rnd() * 0.25, 0.16, easeIn)
+        if (want[p] < 0.5 && block.open[p] > 0.5) this.setPart(block, p, 0, (0.05 + rnd() * 0.25) * k, 0.16, easeIn)
       }
     }
 
     for (const m of plan.moves) {
       const block = this.roomBlock(m.id)!
-      const delay = 0.85 + rnd() * 0.45
+      const delay = (0.85 + rnd() * 0.45) * k
       const from = nodeCenter(m.from)
       const to = nodeCenter(m.to)
       const dist = Math.hypot(to[0] - from[0], (to[1] - from[1]) * 1.5, to[2] - from[2])
-      const dur = 1.0 + dist * 0.025
+      const dur = (1.0 + dist * 0.025) * k
       this.tween({ block, prop: "pos", from, to, at: delay, dur, ease: easeInOut })
       arrive.set(m.id, delay + dur)
       end = Math.max(end, delay + dur)
     }
 
     for (const e of plan.added) {
-      const start = Math.max(arrive.get(e.a) ?? 0.95, arrive.get(e.b) ?? 0.95) + 0.05
+      const start = Math.max(arrive.get(e.a) ?? 0.95 * k, arrive.get(e.b) ?? 0.95 * k) + 0.05
       const block = this.addEdge(e, 0)
-      this.tween({ block, prop: "extend", from: 0, to: 1, at: start, dur: 0.55, ease: easeOutBack })
+      this.tween({ block, prop: "extend", from: 0, to: 1, at: start, dur: 0.55 * k, ease: easeOutBack })
       for (const l of landings(e)) {
         const room = this.roomBlock(l.room)!
-        this.setPart(room, doorPart(l.side), 1, start - 0.2, 0.3)
-        this.setPart(room, gatePart(l.side, l.lane), 1, start - 0.15, 0.3)
+        this.setPart(room, doorPart(l.side), 1, start - 0.2 * k, 0.3 * k)
+        this.setPart(room, gatePart(l.side, l.lane), 1, start - 0.15 * k, 0.3 * k)
       }
-      end = Math.max(end, start + 0.55)
+      end = Math.max(end, start + 0.55 * k)
     }
 
     // The famous cascade: doors all over the castle bang shut and fly open
@@ -252,17 +337,18 @@ export class World {
         for (let side = 0; side < 4; side++) {
           const p = doorPart(side)
           if (block.open[p] < 0.5) continue
-          const at = 0.05 + d * 0.012
+          const at = (0.05 + d * 0.012) * k
           this.setPart(block, p, 0, at, 0.14, easeIn)
-          this.setPart(block, p, 1, at + 0.5 + rnd() * 0.4, 0.3)
+          this.setPart(block, p, 1, at + (0.5 + rnd() * 0.4) * k, 0.3)
         }
       }
     }
-    return end
+    return { length: end, arrive }
   }
 
   update(dt: number) {
     this.clock += dt
+    for (const t of this.trains) this.runTrain(t, dt)
     const now = this.clock
     const finished: Tween[] = []
     for (const t of this.tweens) {
@@ -291,6 +377,11 @@ export class World {
     return this.tweens.length > 0
   }
 
+  /** Rooms are still sliding or passages still folding (doors don't count). */
+  get moving() {
+    return this.tweens.some((t) => typeof t.prop !== "number")
+  }
+
   // ── Physics ────────────────────────────────────────────────────────────
 
   /** Collision boxes of every block near a point, in world space. */
@@ -298,7 +389,7 @@ export class World {
     out.length = 0
     for (const block of this.blocks.values()) {
       if (block.dying || block.extend < 0.999) continue
-      const reach = radius + 16
+      const reach = radius + 18
       const c = this.blockCentre(block)
       if (Math.abs(c[0] - p[0]) > reach || Math.abs(c[1] - p[1]) > reach || Math.abs(c[2] - p[2]) > reach) continue
       const tpl = this.templates.get(block.template)!
@@ -317,7 +408,7 @@ export class World {
   }
 
   blockCentre(block: Block): Vec3 {
-    if (block.room) return block.pos
+    if (block.room || block.train) return block.pos
     const [x, z] = turn(block.q, 6.2, 0)
     return [block.pos[0] + x, block.pos[1] + LEVEL / 2, block.pos[2] + z]
   }
@@ -325,6 +416,32 @@ export class World {
   blockByOwner(owner: number) {
     for (const b of this.blocks.values()) if (b.owner === owner) return b
     return undefined
+  }
+
+  /**
+   * The top of whatever solid is directly under or over a vertical line,
+   * from everything in the castle (not just what's near): what someone
+   * falling down that line would hit first is the highest box below them.
+   */
+  solidsAt(x: number, z: number, r: number) {
+    const tops: { top: number; bottom: number; owner: number }[] = []
+    for (const block of this.blocks.values()) {
+      if (block.dying) continue
+      const c = this.blockCentre(block)
+      if (Math.abs(c[0] - x) > 26 || Math.abs(c[2] - z) > 26) continue
+      const tpl = this.templates.get(block.template)!
+      for (const b of tpl.boxes) {
+        const [ax, az] = turn(block.q, b.min[0], b.min[2])
+        const [bx, bz] = turn(block.q, b.max[0], b.max[2])
+        const x0 = Math.min(ax, bx) + block.pos[0]
+        const x1 = Math.max(ax, bx) + block.pos[0]
+        const z0 = Math.min(az, bz) + block.pos[2]
+        const z1 = Math.max(az, bz) + block.pos[2]
+        if (x + r < x0 || x - r > x1 || z + r < z0 || z - r > z1) continue
+        tops.push({ top: b.max[1] + block.pos[1], bottom: b.min[1] + block.pos[1], owner: block.owner })
+      }
+    }
+    return tops
   }
 
   /** The room whose walls enclose a point (inside, not on the veranda). */

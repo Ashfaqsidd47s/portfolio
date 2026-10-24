@@ -2,7 +2,7 @@ import * as THREE from "three"
 import { CELL, LEVEL, type Vec3 } from "../castle"
 import type { Block, TemplateKey, World } from "../world"
 import { Builder, turn } from "./builder"
-import { MAX_LIGHTS, PART_COUNT, buildEdge, buildRoom, type Template } from "./kit"
+import { MAX_LIGHTS, PART_COUNT, buildCar, buildEdge, buildRoom, type Template } from "./kit"
 import {
   castleFragment,
   castleVertex,
@@ -26,8 +26,9 @@ const FOG = {
 
 export function buildTemplates() {
   const map = new Map<TemplateKey, Template>()
-  for (const k of ["hall", "akaza", "doma", "kokushibo", "nakime"] as const) map.set(k, buildRoom(k))
+  for (const k of ["hall", "terrace", "akaza", "doma", "kokushibo", "nakime"] as const) map.set(k, buildRoom(k))
   for (const k of ["bridge", "corridor", "stair"] as const) map.set(k, buildEdge(k))
+  for (const k of ["carriage", "deck", "great"] as const) map.set(k, buildCar(k))
   return map
 }
 
@@ -131,7 +132,9 @@ export class CastleView {
       const e = Math.max(block.extend, 0.001)
       mesh.position.set(...block.pos)
       mesh.scale.set(e, block.template === "stair" ? e : 1, 1)
-      mesh.visible = block.extend > 0.002
+      // Carriages out at the ends of their tracks are lost in the fog anyway.
+      const far = block.train && Math.hypot(cam.x - block.pos[0], cam.z - block.pos[2]) > 320
+      mesh.visible = block.extend > 0.002 && !far
       const u = (mesh.material as THREE.ShaderMaterial).uniforms
       const open = u.uOpen.value as number[]
       for (let i = 0; i < PART_COUNT; i++) open[i] = block.open[i]
@@ -193,6 +196,8 @@ export class CastleView {
       for (let j = -R; j < bounds.z + R; j++) {
         for (let k = -20; k < bounds.y + 20; k++) {
           if (inside(i, k, j)) continue
+          // Keep the train tracks round the castle clear.
+          if ((i === -1 || i === bounds.x || j === -1 || j === bounds.z) && k >= -2 && k <= bounds.y + 1) continue
           const di = Math.max(-1 - i, i - bounds.x, 0)
           const dj = Math.max(-1 - j, j - bounds.z, 0)
           const dk = Math.max(-2 - k, k - bounds.y - 1, 0) / 3
