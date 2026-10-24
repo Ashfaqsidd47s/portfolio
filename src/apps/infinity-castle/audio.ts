@@ -9,6 +9,8 @@
  * wind when falling, and her idle melody, positioned where she sits.
  * Over it all, the chase score (score.ts), on its own bus so it can be
  * turned off separately — or, if the site ships one at TRACK, a recording.
+ * The biwa itself (the strums that reshape the castle, and her melody) has
+ * a bus of its own too, set well under the rest, with its own mute.
  */
 
 import { Score, type ScoreMode } from "./score"
@@ -22,6 +24,24 @@ const TRACK = `${import.meta.env.BASE_URL}audio/infinity-castle.mp3`
 const TRACK_LEVEL: Record<ScoreMode, number> = { off: 0, wait: 0.5, chase: 1, finale: 0 }
 /** The score sits under the castle's own sounds. */
 const MUSIC_LEVEL = 0.4
+/** The biwa at full volume; its default volume (0–1) is well under that. */
+const BIWA_LEVEL = 0.75
+export const BIWA_DEFAULT = 0.45
+const MASTER_LEVEL = 0.8
+
+export type Mix = {
+  /** Everything. */
+  muted: boolean
+  volume: number
+  /** The score. */
+  music: boolean
+  musicVolume: number
+  /** Nakime's biwa: the strums that move the castle, and her melody. */
+  biwa: boolean
+  biwaVolume: number
+}
+
+export const DEFAULT_MIX: Mix = { muted: false, volume: 1, music: true, musicVolume: 1, biwa: true, biwaVolume: BIWA_DEFAULT }
 
 function pluck(freq: number, seconds: number, opts: { buzz: number; bright: number; decay: number }) {
   const n = Math.floor(SR * seconds)
@@ -84,9 +104,9 @@ export class CastleAudio {
   private notes = new Map<number, AudioBuffer>()
   private nakime!: PannerNode
   private melodyTimer = 0
-  private muted = false
+  private mix: Mix = { ...DEFAULT_MIX }
   private musicBus!: GainNode
-  private musicOn = true
+  private biwaBus!: GainNode
   private score: Score | null = null
   private scoreMode: ScoreMode = "off"
   private track: HTMLAudioElement | null = null
@@ -107,7 +127,7 @@ export class CastleAudio {
     const ctx = new Ctx()
     this.ctx = ctx
     this.master = ctx.createGain()
-    this.master.gain.value = this.muted ? 0 : 0.8
+    this.master.gain.value = this.level("master")
     const comp = ctx.createDynamicsCompressor()
     comp.threshold.value = -14
     comp.ratio.value = 4
@@ -125,16 +145,22 @@ export class CastleAudio {
 
     this.drone()
     this.windLoop()
+    // The biwa's own bus, dry and through the echo, so one fader takes both.
+    this.biwaBus = ctx.createGain()
+    this.biwaBus.gain.value = this.level("biwa")
+    this.biwaBus.connect(this.master)
+    const biwaVerb = ctx.createGain()
+    biwaVerb.gain.value = 0.7
+    this.biwaBus.connect(biwaVerb).connect(this.verbSend)
     this.nakime = ctx.createPanner()
     this.nakime.panningModel = "HRTF"
     this.nakime.distanceModel = "inverse"
     this.nakime.refDistance = 8
     this.nakime.rolloffFactor = 1.1
-    this.nakime.connect(this.master)
-    this.nakime.connect(this.verbSend)
+    this.nakime.connect(this.biwaBus)
 
     this.musicBus = ctx.createGain()
-    this.musicBus.gain.value = this.musicOn ? MUSIC_LEVEL : 0
+    this.musicBus.gain.value = this.level("music")
     this.musicBus.connect(this.master)
     const musicVerb = ctx.createGain()
     musicVerb.gain.value = 0.5
@@ -165,14 +191,21 @@ export class CastleAudio {
     el.src = TRACK
   }
 
-  setMuted(muted: boolean) {
-    this.muted = muted
-    if (this.ctx) this.master.gain.setTargetAtTime(muted ? 0 : 0.8, this.ctx.currentTime, 0.05)
+  private level(bus: "master" | "music" | "biwa") {
+    const m = this.mix
+    if (bus === "master") return m.muted ? 0 : MASTER_LEVEL * m.volume
+    if (bus === "music") return m.music ? MUSIC_LEVEL * m.musicVolume : 0
+    return m.biwa ? BIWA_LEVEL * m.biwaVolume : 0
   }
 
-  setMusic(on: boolean) {
-    this.musicOn = on
-    if (this.ctx) this.musicBus.gain.setTargetAtTime(on ? MUSIC_LEVEL : 0, this.ctx.currentTime, 0.1)
+  /** Mutes and volumes, for everything, the score and the biwa separately. */
+  setMix(mix: Partial<Mix>) {
+    this.mix = { ...this.mix, ...mix }
+    if (!this.ctx) return
+    const t = this.ctx.currentTime
+    this.master.gain.setTargetAtTime(this.level("master"), t, 0.05)
+    this.musicBus.gain.setTargetAtTime(this.level("music"), t, 0.1)
+    this.biwaBus.gain.setTargetAtTime(this.level("biwa"), t, 0.05)
   }
 
   /** Where the score is: waiting, chasing, or rising with the castle. */
@@ -226,7 +259,7 @@ export class CastleAudio {
     return buf
   }
 
-  private play(buf: AudioBuffer, at: number, gain: number, dest: AudioNode = this.master, bend = 0) {
+  private play(buf: AudioBuffer, at: number, gain: number, dest: AudioNode = this.biwaBus, bend = 0) {
     const ctx = this.ctx!
     const src = ctx.createBufferSource()
     src.buffer = buf
@@ -239,7 +272,6 @@ export class CastleAudio {
     g.gain.value = gain
     src.connect(g)
     g.connect(dest)
-    if (dest === this.master) g.connect(this.verbSend)
     src.start(at)
   }
 
@@ -248,8 +280,8 @@ export class CastleAudio {
     if (!this.ctx) return
     const t = this.ctx.currentTime + 0.01
     const base = heavy ? 98 : 110 + Math.floor(Math.random() * 3) * 7
-    this.play(this.note(base * 1.5)!, t, 0.5, this.master, 0.02)
-    this.play(this.note(base)!, t + 0.11, 0.95, this.master, 0.035)
+    this.play(this.note(base * 1.5)!, t, 0.5, this.biwaBus, 0.02)
+    this.play(this.note(base)!, t + 0.11, 0.95, this.biwaBus, 0.035)
     this.play(this.note(base * 2)!, t + 0.115, 0.45)
     if (heavy) this.play(this.note(base / 2)!, t + 0.12, 0.8)
   }

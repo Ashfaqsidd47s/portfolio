@@ -33,6 +33,8 @@ export const MAT = {
   skin: 18,
   frost: 19,
   moon: 20,
+  sudare: 21,
+  iron: 22,
 } as const
 
 export type LocalBox = { min: Vec3; max: Vec3; part: number }

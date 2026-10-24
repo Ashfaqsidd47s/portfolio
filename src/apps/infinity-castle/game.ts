@@ -3,11 +3,12 @@ import { Castle, CELL, LANDMARKS, LEVEL, nodeCenter, nodeKey, type Landmark, typ
 import type { CastleAudio } from "./audio"
 import { sameUp, upOf } from "./orient"
 import type { ScoreMode } from "./score"
-import { BODY, createBody, depenetrate, step, upVector, type Body, type Box, type Up } from "./physics"
+import { RING_TOP } from "./lines"
+import { BODY, createBody, depenetrate, liftOnto, step, upVector, type Body, type Box, type Up } from "./physics"
 import type { Output } from "./render/output"
 import { ROOF_PART, TRAP_PART, doorPart } from "./render/kit"
 import { CastleView, buildTemplates } from "./render/view"
-import { World } from "./world"
+import { CATCHER_OWNER, World, type Block } from "./world"
 
 /**
  * One visit to the castle: the endless fall behind the title, the drop
@@ -15,6 +16,12 @@ import { World } from "./world"
  * open, walking the castle while she rearranges it (and the rooms she has
  * turned over, where the floor is a wall), finding the three Upper Moons'
  * rooms, and reaching her.
+ *
+ * Every building pulls toward its own floor: walk into a wall that is
+ * some other building's floor (a deck standing on end, a hall on its side,
+ * a carriage tipped over) and gravity turns to it. Fall off everything and
+ * the biwa sounds: a room rushes up out of the dark to catch you, then
+ * Nakime sets it into the castle.
  */
 
 export type Phase = "title" | "intro" | "play" | "finale" | "ended"
@@ -88,6 +95,12 @@ const smooth = (t: number) => {
 
 type DropState = { y: number; v: number; t: number; broke: boolean; opened: boolean; kick: number }
 
+/** A fall being caught: the room sent up, and how far along it is. */
+type Catch = { block: Block; t: number; landedAt: number; settling: boolean }
+
+/** Falling this long with nothing below, and a room comes up for you. */
+const CATCH_AFTER = 1.1
+
 function segmentDistance(p: Vec3, a: Vec3, b: Vec3) {
   const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
   const ap = [p[0] - a[0], p[1] - a[1], p[2] - a[2]]
@@ -147,6 +160,9 @@ export class Game {
   private settle = 0
   private roll = 0
   private strayNoted = false
+  private noted = new Set<string>()
+  private airTime = 0
+  private catching: Catch | null = null
 
   constructor(seed: number, output: Output, audio: CastleAudio, emit: (e: GameEvent) => void) {
     this.castle = new Castle(seed)
@@ -155,12 +171,14 @@ export class Game {
     this.world = new World(this.castle, templates)
     const land = this.castle.rooms.get(this.castle.landingId)!.node
     const [lx, ly, lz] = nodeCenter(land)
-    const top = (this.castle.size.y + 1) * LEVEL + 8
-    this.view = new CastleView(templates, this.castle.size, {
-      column: [lx, lz],
-      node: [land[0], land[2]],
-      span: [top, ly + DROP_HEIGHT - 70],
-    })
+    // The rooms tumbling past the fall stay above the ring's overhead deck.
+    const top = Math.max((this.castle.size.y + 1) * LEVEL + 8, RING_TOP + 14)
+    this.view = new CastleView(
+      templates,
+      this.castle.size,
+      { column: [lx, lz], node: [land[0], land[2]], span: [top, ly + DROP_HEIGHT - 70] },
+      this.world.network.keepOut
+    )
     this.output = output
     this.audio = audio
     this.emit = emit
@@ -255,6 +273,8 @@ export class Game {
   strum(opts: { heavy?: boolean; intro?: boolean; manual?: boolean } = {}) {
     if (this.phase === "finale" || this.phase === "ended") return
     if (opts.manual && (this.time - this.lastStrum < 3.5 || this.world.busy || this.drop)) return
+    // While a room is catching you, the castle waits for it.
+    if (this.catching && !opts.intro) return
     const p = this.body.pos
     const playing = this.phase !== "title"
     const near = playing
@@ -343,9 +363,7 @@ export class Game {
   }
 
   private reopen(roomId: number, at: number) {
-    const block = this.world.roomBlock(roomId)!
-    const open = this.castle.openSides(roomId)
-    open.forEach((o, side) => o && this.world.setPart(block, doorPart(side), 1, at, 0.3))
+    this.world.reopen(this.world.roomBlock(roomId)!, at)
   }
 
   private setGravity(up: Up) {
@@ -377,6 +395,8 @@ export class Game {
     this.stats.falls++
     this.later(0.45, () => {
       this.release()
+      this.world.removeCatcher()
+      this.catching = null
       const halls = [...this.castle.rooms.values()].filter((r) => r.kind === "hall")
       const fresh = halls.filter((r) => !this.visited.has(r.id))
       const pool = fresh.length ? fresh : halls
@@ -425,8 +445,9 @@ export class Game {
       this.farT = 0
     }
 
+    // Where everything that moves was, so whatever you stand on carries you.
     const before = new Map<number, Vec3>()
-    for (const b of this.world.blocks.values()) if (b.room) before.set(b.owner, b.pos)
+    for (const b of this.world.blocks.values()) if (b.room || b.car || b.catcher) before.set(b.owner, b.pos)
     this.world.update(dt)
 
     switch (this.phase) {
@@ -554,7 +575,10 @@ export class Game {
     if (body.grounded && before.has(body.ground)) {
       const now = this.world.blockByOwner(body.ground)?.pos
       const was = before.get(body.ground)!
-      if (now) for (let i = 0; i < 3; i++) body.pos[i] += now[i] - was[i]
+      // (A looping car that wrapped round has folded away: nothing to ride.)
+      if (now && Math.hypot(now[0] - was[0], now[1] - was[1], now[2] - was[2]) < 6) {
+        for (let i = 0; i < 3; i++) body.pos[i] += now[i] - was[i]
+      }
     }
 
     // Wish velocity across the current floor.
@@ -571,6 +595,7 @@ export class Game {
     const wish: Vec3 = [dir.x * speed, dir.y * speed, dir.z * speed]
 
     this.world.collect(body.pos, 4, this.boxes)
+    liftOnto(body, this.boxes)
     depenetrate(body, this.boxes)
     const was: Vec3 = [...body.pos]
     const res = step(body, this.boxes, wish, this.input.jump, dt)
@@ -578,11 +603,14 @@ export class Game {
     const u = body.up.axis
     const moved = Math.hypot(...was.map((v, i) => (i === u ? 0 : body.pos[i] - v)))
 
-    if (res.landed > 4) {
-      this.audio.land(res.landed)
-      this.dip = Math.min(0.35, res.landed * 0.012)
-      if (res.landed > 14) this.shake = Math.max(this.shake, this.reduced ? 0 : 0.7)
+    // Landing in a catching room: it was moving with you, so it's a soft one.
+    const landed = this.catching && body.ground === this.catching.block.owner ? Math.min(res.landed, 7) : res.landed
+    if (landed > 4) {
+      this.audio.land(landed)
+      this.dip = Math.min(0.35, landed * 0.012)
+      if (landed > 14) this.shake = Math.max(this.shake, this.reduced ? 0 : 0.7)
     }
+    this.airTime = body.grounded ? 0 : this.airTime + dt
     if (this.holding && body.grounded) {
       this.release()
       this.settle = 1.3
@@ -624,7 +652,18 @@ export class Game {
       if (this.walked > this.nextStrumAt || this.time - this.lastStrum > 50) this.strum()
       this.discover()
       if (this.flipped && this.time > this.flipped.until) this.unflip()
+      this.notice()
+      if (
+        !this.catching &&
+        this.relocating <= 0 &&
+        this.airTime > CATCH_AFTER &&
+        fallSpeed > 12 &&
+        this.world.clearBelow(body.pos, 34)
+      ) {
+        this.beginCatch()
+      }
     }
+    if (this.catching) this.updateCatch(dt)
 
     // Fell out of the castle?
     const { x, y, z } = this.castle.size
@@ -636,7 +675,9 @@ export class Game {
       p[0] > (x + 1.2) * CELL ||
       p[2] < -CELL * 2.2 ||
       p[2] > (z + 1.2) * CELL
-    if (out && this.relocating <= 0) this.relocate()
+    // (While a room is catching you, you're in hand: only a fall into the abyss ends it.)
+    const caught = this.catching && p[1] > -LEVEL * 30
+    if (out && this.relocating <= 0 && !caught) this.relocate()
     if (this.relocating > 0) {
       this.relocating -= dt
       this.black = Math.max(this.black, Math.min(1, 1 - Math.abs(this.relocating - 0.4) * 2.5))
@@ -647,9 +688,104 @@ export class Game {
     this.updateScent()
   }
 
+  /** The biwa, and a room rushes up out of the dark to catch the fall. */
+  private beginCatch() {
+    const body = this.body
+    const wasUp = !sameUp(body.up, UPRIGHT)
+    if (wasUp) {
+      // It comes from below, so down is down again first.
+      this.setGravity(UPRIGHT)
+      body.vel = [body.vel[0] * 0.2, -Math.min(22, Math.hypot(...body.vel)), body.vel[2] * 0.2]
+    }
+    this.flipped = null
+    const p = body.pos
+    const block = this.world.spawnCatcher([p[0], p[1] - BODY.halfHeight - 14, p[2]])
+    this.catching = { block, t: 0, landedAt: 0, settling: false }
+    this.audio.strum(true)
+    this.audio.rumble(2.5)
+    this.pulse = 1
+    this.pulseT = 0
+    this.emit({ type: "strum" })
+    this.emit({ type: "toast", title: "Be-ben", sub: "A room rushes up out of the dark to catch you." })
+  }
+
+  /**
+   * The catching room: it chases the fall from below, takes you in through
+   * its open roof, slows to a stop with you aboard, and then Nakime sets it
+   * into the castle beside the maze.
+   */
+  private updateCatch(dt: number) {
+    const c = this.catching!
+    const body = this.body
+    const block = c.block
+    c.t += dt
+    if (c.settling) return
+    if (!c.landedAt) {
+      if (body.grounded && body.ground === block.owner) {
+        c.landedAt = c.t
+        this.world.setPart(block, ROOF_PART, 0, 0.5, 0.6)
+        this.later(1.05, () => this.audio.slam(3))
+        return
+      }
+      if (c.t > 5) {
+        this.relocate()
+        return
+      }
+      // Stay under the visitor, and close in from below at a gentle speed.
+      const gap = body.pos[1] - BODY.halfHeight - block.pos[1]
+      const approach = gap > 6 ? 24 : 4 + gap * 2.5
+      this.world.catcherVel = [(body.pos[0] - block.pos[0]) * 5, body.vel[1] + approach, (body.pos[2] - block.pos[2]) * 5]
+      return
+    }
+    // Aboard: brake to a stop.
+    const v = this.world.catcherVel
+    const k = Math.exp(-dt * 2.4)
+    this.world.catcherVel = [v[0] * k, v[1] * k, v[2] * k]
+    if (Math.hypot(...this.world.catcherVel) > 0.4 || c.t - c.landedAt < 1.6) return
+    c.settling = true
+    this.world.catcherVel = [0, 0, 0]
+    const placed = this.castle.adopt(block.pos)
+    if (!placed) {
+      this.relocate()
+      return
+    }
+    const room = this.world.adoptCatcher(placed.room)
+    if (body.ground === CATCHER_OWNER) body.ground = room.owner
+    const to = nodeCenter(placed.room.node)
+    const dist = Math.hypot(to[0] - room.pos[0], (to[1] - room.pos[1]) * 1.5, to[2] - room.pos[2])
+    const dur = 1.4 + dist * 0.02
+    this.world.slide(room, to, 0.3, dur)
+    this.audio.strum()
+    this.audio.rumble(dur + 0.5)
+    this.pulse = 0.8
+    this.pulseT = 0
+    this.emit({ type: "strum" })
+    this.later(0.3 + dur + 0.05, () => {
+      this.world.play({ moves: [], removed: [], added: placed.edges, turned: [] })
+      this.audio.slam(2)
+      this.catching = null
+      this.emit({ type: "toast", title: "Set down in the castle", sub: "Nakime slots the room in among the others." })
+    })
+  }
+
+  /** First time on a line, aboard a car or in a great hall: say what it is. */
+  private notice() {
+    if (!this.body.grounded) return
+    const kind = this.world.kindOf(this.body.ground)
+    if (kind === "room" || kind === "other" || this.noted.has(kind)) return
+    this.noted.add(kind)
+    const say = {
+      line: ["A train path", "Rooms run along it like carriages. Step aboard as one slides past."],
+      car: ["Aboard", "It carries you along the line. Walk off its open end to get down."],
+      great: ["A great hall", "Pillars, two tiers of walls, and its own floor to stand on."],
+    }[kind]
+    this.emit({ type: "toast", title: say[0], sub: say[1] })
+  }
+
   /**
    * Gravity follows the room you're in: inside a stray its floor is the
-   * floor; back on its bridge, or in an upright hall, down is down again.
+   * floor; walk into another building's floor and it takes you; back on a
+   * stray's bridge, or in an upright hall, down is down again.
    */
   private followFloor() {
     const body = this.body
@@ -669,7 +805,22 @@ export class Game {
       }
       return
     }
-    if (this.flipped || sameUp(body.up, UPRIGHT)) return
+    if (this.flipped) return
+    const next = this.world.floorAhead(body, this.boxes)
+    if (next) {
+      this.setGravity(next)
+      this.audio.slam(1)
+      if (!this.noted.has("gravity")) {
+        this.noted.add("gravity")
+        this.emit({
+          type: "toast",
+          title: next.axis === 1 && next.sign > 0 ? "Down is down again" : "Its floor is your floor",
+          sub: "Every building pulls toward its own floor. Walk into one that stands on end and it takes you.",
+        })
+      }
+      return
+    }
+    if (sameUp(body.up, UPRIGHT)) return
     if (this.world.spurAt(body.pos) || this.world.roomContaining(body.pos, -0.4)) this.setGravity(UPRIGHT)
   }
 
@@ -743,7 +894,10 @@ export class Game {
       const to: Vec3 = [b.pos[0], b.pos[1] + 400, b.pos[2]]
       this.world.slide(b, to, 1 + d * 0.02 + Math.random() * 0.6, 5, (t) => t * t)
     }
-    for (const b of this.world.blocks.values()) if (b.edge || b.spur) this.world.fold(b, 0.6 + Math.random() * 0.6)
+    for (const b of this.world.blocks.values()) if (b.edge || b.spur || b.dock) this.world.fold(b, 0.6 + Math.random() * 0.6)
+    this.world.removeCatcher()
+    this.catching = null
+    this.world.liftLines(1.2)
   }
 
   private updateFinale(dt: number) {

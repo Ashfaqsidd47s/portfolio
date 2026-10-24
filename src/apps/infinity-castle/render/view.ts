@@ -3,7 +3,7 @@ import { CELL, LEVEL, type Vec3 } from "../castle"
 import type { Block, TemplateKey, World } from "../world"
 import { Builder, turn } from "./builder"
 import { Drop, quatOf } from "./drop"
-import { MAX_LIGHTS, PART_COUNT, buildEdge, buildRoom, type Template } from "./kit"
+import { MAX_LIGHTS, PART_COUNT, buildCar, buildDeck, buildEdge, buildGreatHall, buildHall, buildRoom, type Template } from "./kit"
 import {
   castleFragment,
   castleVertex,
@@ -27,8 +27,13 @@ const FOG = {
 
 export function buildTemplates() {
   const map = new Map<TemplateKey, Template>()
-  for (const k of ["hall", "akaza", "doma", "kokushibo", "nakime"] as const) map.set(k, buildRoom(k))
+  for (const k of ["akaza", "doma", "kokushibo", "nakime"] as const) map.set(k, buildRoom(k))
+  for (const k of ["hall", "sudare", "shoji"] as const) map.set(k, buildHall(k))
   for (const k of ["bridge", "corridor", "stair"] as const) map.set(k, buildEdge(k))
+  for (const k of ["deck1", "deck2"] as const) map.set(k, buildDeck(k))
+  for (const k of ["carriage", "pavilion", "tower"] as const) map.set(k, buildCar(k))
+  map.set("greatHall", buildGreatHall(false))
+  map.set("greatHallTurned", buildGreatHall(true))
   return map
 }
 
@@ -45,6 +50,9 @@ export type FrameFx = {
 
 /** Where the visitor falls in: the landing column, and the heights the drop spans. */
 export type DropSite = { column: [number, number]; node: [number, number]; span: [number, number] }
+
+/** Space the distant castle keeps clear of: where the lines and their halls run. */
+export type KeepOut = { min: Vec3; max: Vec3 }[]
 
 const local = new THREE.Vector3()
 export class CastleView {
@@ -68,7 +76,7 @@ export class CastleView {
     uFall: { value: 0 },
   }
 
-  constructor(templates: Map<TemplateKey, Template>, bounds: { x: number; y: number; z: number }, site: DropSite) {
+  constructor(templates: Map<TemplateKey, Template>, bounds: { x: number; y: number; z: number }, site: DropSite, keepOut: KeepOut = []) {
     this.templates = templates
     this.base = new THREE.ShaderMaterial({
       vertexShader: castleVertex,
@@ -105,7 +113,7 @@ export class CastleView {
     this.sky.renderOrder = -10
     this.scene.add(this.sky)
 
-    const { far, glows } = this.buildFar(bounds, site.node)
+    const { far, glows } = this.buildFar(bounds, site.node, keepOut)
     this.far = far
     this.glows = glows
     this.embers = this.buildEmbers()
@@ -142,7 +150,7 @@ export class CastleView {
     let mesh = this.meshes.get(block.key)
     if (mesh) return mesh
     const tpl = this.templates.get(block.template)!
-    const mat = this.material(tpl, block.seed, block.room || block.stray ? (block.seed * 7.31) % 1 : 0)
+    const mat = this.material(tpl, block.seed, block.room || block.stray || block.car || block.great || block.catcher ? (block.seed * 7.31) % 1 : 0)
     mesh = new THREE.Mesh(tpl.geometry, mat)
     mesh.rotation.y = (-block.q * Math.PI) / 2
     mesh.matrixAutoUpdate = true
@@ -193,7 +201,7 @@ export class CastleView {
 
   // ── The castle beyond reach ────────────────────────────────────────────
 
-  private buildFar(bounds: { x: number; y: number; z: number }, clear: [number, number]) {
+  private buildFar(bounds: { x: number; y: number; z: number }, clear: [number, number], keepOut: KeepOut) {
     // One simplified room: platform, walls, hipped roof, stilts.
     const b = new Builder()
     b.box([-5.8, -0.7, -5.8], [5.8, 0, 5.8], 0)
@@ -221,9 +229,21 @@ export class CastleView {
       return s / 2147483647
     }
     // The castle itself, and the sky over the landing hall that the visitor falls down.
+    // A far room is about 12 m across and 8 m tall round its node.
+    const kept = (i: number, k: number, j: number) =>
+      keepOut.some(
+        (b) =>
+          i * CELL + 7 > b.min[0] &&
+          i * CELL - 7 < b.max[0] &&
+          k * LEVEL + 7 > b.min[1] &&
+          k * LEVEL - 4 < b.max[1] &&
+          j * CELL + 7 > b.min[2] &&
+          j * CELL - 7 < b.max[2]
+      )
     const inside = (i: number, k: number, j: number) =>
       (i >= -1 && i <= bounds.x && j >= -1 && j <= bounds.z && k >= -2 && k <= bounds.y + 1) ||
-      (Math.abs(i - clear[0]) <= 1 && Math.abs(j - clear[1]) <= 1 && k >= bounds.y - 1)
+      (Math.abs(i - clear[0]) <= 1 && Math.abs(j - clear[1]) <= 1 && k >= bounds.y - 1) ||
+      kept(i, k, j)
     const R = 13
     for (let i = -R; i < bounds.x + R; i++) {
       for (let j = -R; j < bounds.z + R; j++) {

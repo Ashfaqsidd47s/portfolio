@@ -27,7 +27,7 @@ const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
 /** The orientation sending local x and y to the given world axes. */
-function fromAxes(x: Vec3, y: Vec3): Mat3 {
+export function fromAxes(x: Vec3, y: Vec3): Mat3 {
   const z = cross(x, y)
   return [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]]
 }
@@ -89,3 +89,10 @@ export function orientBox(m: Mat3, min: Vec3, max: Vec3): { min: Vec3; max: Vec3
 }
 
 export const sameUp = (a: Up, b: Up) => a.axis === b.axis && a.sign === b.sign
+
+/** a·b: turn by b, then by a. */
+export function multiply(a: Mat3, b: Mat3): Mat3 {
+  const out: number[] = []
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) out.push(a[r * 3] * b[c] + a[r * 3 + 1] * b[3 + c] + a[r * 3 + 2] * b[6 + c])
+  return out as unknown as Mat3
+}
