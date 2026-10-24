@@ -154,4 +154,44 @@ describe("Castle", () => {
     for (let i = 0; i < 20; i++) expect(castle.shift({ lockedStrays: locked }).turned).toHaveLength(0)
     expect(castle.strays.map((s) => s.orient)).toEqual(before)
   })
+
+  it("slides a room it's told to first, even a locked one, and stays connected", () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const castle = new Castle(seed)
+      const pairs = [...castle.rooms.values()].flatMap((top) =>
+        [...castle.rooms.values()]
+          .filter((r) => r.node[0] === top.node[0] && r.node[2] === top.node[2] && r.node[1] === top.node[1] - 1)
+          .map((below) => ({ top, below }))
+      )
+      const pair = pairs.find((p) => p.top.kind !== "nakime")
+      if (!pair) continue
+      const { top, below } = pair
+      const [x, k, z] = top.node
+      const avoid = (n: [number, number, number]) => (n[0] === x && n[2] === z) || n[1] >= k
+      const plan = castle.shift({ lockedRooms: new Set([top.id, below.id]), first: [{ id: below.id, avoid }], count: 1 })
+      expect(castle.isConnected()).toBe(true)
+      const move = plan.moves.find((m) => m.id === below.id)
+      if (move) expect(avoid(move.to)).toBe(false)
+      expect(castle.rooms.get(top.id)!.node).toEqual([x, k, z])
+    }
+  })
+
+  it("brings a room to a given node", () => {
+    let moved = 0
+    for (let seed = 1; seed <= 12; seed++) {
+      const castle = new Castle(seed)
+      const room = [...castle.rooms.values()].find((r) => r.kind === "hall" && r.id !== castle.landingId)!
+      const to = ([1, 0, -1] as const)
+        .flatMap((dx) => [1, 0, -1].map((dz) => [room.node[0] + dx, room.node[1], room.node[2] + dz] as [number, number, number]))
+        .find((n) => castle.inBounds(n) && !castle.roomAt(n) && !castle.isReserved(n) && castle.touchesMaze(n, room))
+      if (!to) continue
+      const plan = castle.shift({ first: [{ id: room.id, to }], count: 1 })
+      if (plan.moves.length) {
+        moved++
+        expect(castle.rooms.get(room.id)!.node).toEqual(to)
+      }
+      expect(castle.isConnected()).toBe(true)
+    }
+    expect(moved).toBeGreaterThan(0)
+  })
 })

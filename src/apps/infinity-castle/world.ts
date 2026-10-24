@@ -471,10 +471,15 @@ export class World {
    * passages fold away, rooms slide to their new nodes, and new passages
    * unfold once both of their rooms have arrived. Returns its length.
    */
-  play(plan: ShiftPlan, opts: { cascadeFrom?: Vec3; still?: ReadonlySet<number> } = {}): number {
+  play(
+    plan: ShiftPlan,
+    opts: { cascadeFrom?: Vec3; still?: ReadonlySet<number>; tempo?: number } = {}
+  ): { length: number; arrive: Map<number, number> } {
+    // Below 1, the whole strum plays faster.
+    const k = opts.tempo ?? 1
     const rnd = () => Math.random()
     const arrive = new Map<number, number>()
-    let end = 1
+    let end = k
 
     const spurs = this.castle.spurs()
     const docks = this.castle.docks()
@@ -484,8 +489,8 @@ export class World {
     for (const block of gone) {
       if (!block) continue
       block.dying = true
-      const at = 0.25 + rnd() * 0.2
-      this.tween({ block, prop: "extend", from: block.extend, to: 0, at, dur: 0.55, ease: easeIn, done: () => this.blocks.delete(block.key) })
+      const at = (0.25 + rnd() * 0.2) * k
+      this.tween({ block, prop: "extend", from: block.extend, to: 0, at, dur: 0.55 * k, ease: easeIn, done: () => this.blocks.delete(block.key) })
     }
 
     // Doors first: whatever loses its passage slams shut. A stray about
@@ -494,15 +499,15 @@ export class World {
     for (const block of this.doorBlocks()) {
       const want = block.stray && turning.has(block.stray.id) ? new Float32Array(PART_COUNT) : this.wanted(block, spurs, docks)
       for (let p = 1; p < TRAP_PART; p++) {
-        if (want[p] < 0.5 && block.open[p] > 0.5) this.setPart(block, p, 0, 0.05 + rnd() * 0.25, 0.16, easeIn)
+        if (want[p] < 0.5 && block.open[p] > 0.5) this.setPart(block, p, 0, (0.05 + rnd() * 0.25) * k, 0.16, easeIn)
       }
     }
 
     for (const t of plan.turned) {
       const block = this.strayBlock(t.id)!
       const stray = block.stray!
-      const delay = 0.6 + rnd() * 0.4
-      const dur = 1.5
+      const delay = (0.6 + rnd() * 0.4) * k
+      const dur = 1.5 * k
       block.turnFrom = TURNED[t.from]
       block.orient = TURNED[t.to]
       block.turnT = 0
@@ -515,11 +520,11 @@ export class World {
 
     for (const m of plan.moves) {
       const block = this.roomBlock(m.id)!
-      const delay = 0.85 + rnd() * 0.45
+      const delay = (0.85 + rnd() * 0.45) * k
       const from = nodeCenter(m.from)
       const to = nodeCenter(m.to)
       const dist = Math.hypot(to[0] - from[0], (to[1] - from[1]) * 1.5, to[2] - from[2])
-      const dur = 1.0 + dist * 0.025
+      const dur = (1.0 + dist * 0.025) * k
       this.tween({ block, prop: "pos", from, to, at: delay, dur, ease: easeInOut })
       arrive.set(m.id, delay + dur)
       end = Math.max(end, delay + dur)
@@ -527,7 +532,7 @@ export class World {
 
     for (const s of spurs) {
       if (this.blocks.has(`s${s.key}`)) continue
-      const start = Math.max(arrive.get(s.anchor) ?? 0.95, arrive.get(s.stray) ?? 0.95) + 0.1
+      const start = Math.max(arrive.get(s.anchor) ?? 0.95 * k, arrive.get(s.stray) ?? 0.95 * k) + 0.1
       const block = this.addSpur(s, 0)
       this.tween({ block, prop: "extend", from: 0, to: 1, at: start, dur: 0.6, ease: easeOutBack })
       const anchor = this.roomBlock(s.anchor)!
@@ -541,7 +546,7 @@ export class World {
 
     for (const d of docks) {
       if (this.blocks.has(`d${d.key}`)) continue
-      const start = (arrive.get(d.anchor) ?? 0.95) + 0.1
+      const start = (arrive.get(d.anchor) ?? 0.95 * k) + 0.1
       const block = this.addDock(d, 0)
       this.tween({ block, prop: "extend", from: 0, to: 1, at: start, dur: 0.6, ease: easeOutBack })
       const anchor = this.roomBlock(d.anchor)!
@@ -551,9 +556,9 @@ export class World {
     }
 
     for (const e of plan.added) {
-      const start = Math.max(arrive.get(e.a) ?? 0.95, arrive.get(e.b) ?? 0.95) + 0.05
+      const start = Math.max(arrive.get(e.a) ?? 0.95 * k, arrive.get(e.b) ?? 0.95 * k) + 0.05
       const block = this.addEdge(e, 0)
-      this.tween({ block, prop: "extend", from: 0, to: 1, at: start, dur: 0.55, ease: easeOutBack })
+      this.tween({ block, prop: "extend", from: 0, to: 1, at: start, dur: 0.55 * k, ease: easeOutBack })
       for (const l of landings(e)) {
         const room = this.roomBlock(l.room)!
         this.setPart(room, doorPart(l.side), 1, start - 0.2, 0.3)
@@ -574,13 +579,13 @@ export class World {
         for (let side = 0; side < 4; side++) {
           const p = doorPart(side)
           if (block.open[p] < 0.5) continue
-          const at = 0.05 + d * 0.012
+          const at = (0.05 + d * 0.012) * k
           this.setPart(block, p, 0, at, 0.14, easeIn)
-          this.setPart(block, p, 1, at + 0.5 + rnd() * 0.4, 0.3)
+          this.setPart(block, p, 1, at + (0.5 + rnd() * 0.4) * k, 0.3)
         }
       }
     }
-    return end
+    return { length: end, arrive }
   }
 
   update(dt: number) {
@@ -711,6 +716,22 @@ export class World {
 
   get busy() {
     return this.tweens.length > 0
+  }
+
+  /** Rooms are still sliding, strays turning or passages folding (doors don't count). */
+  get moving() {
+    return this.tweens.some((t) => typeof t.prop !== "number")
+  }
+
+  /**
+   * Every collision box over or under a vertical line through (x, z), from
+   * the bottom of the castle to the top: what someone falling down that
+   * line would come to.
+   */
+  solidsAt(x: number, z: number, r: number) {
+    return this.collect([x, 40, z], 70, []).filter(
+      (b) => b.min[0] < x + r && b.max[0] > x - r && b.min[2] < z + r && b.max[2] > z - r
+    )
   }
 
   // ── Physics ────────────────────────────────────────────────────────────
