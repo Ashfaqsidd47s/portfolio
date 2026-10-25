@@ -93,7 +93,8 @@ src/
 │  ├─ trypnow/                # supplier + agent demo: builder, AI listing, bookings, marketplace
 │  ├─ elevenbits/             # 11bits, a luxury auction storefront: auction.ts (bid rules, + tests),
 │  │                          #   store.ts (the live room, accounts), catalogue.ts (lots + photos),
-│  │                          #   liquid.ts (WebGL melt + flowmap), stage, lots, lot page, dialogs
+│  │                          #   liquid.ts (WebGL melt + flowmap), stage, lots, lot page, dialogs,
+│  │                          #   footer (the curtain reveal)
 │  ├─ infinity-castle/        # Demon Slayer's Infinity Castle, first person (three.js + GLSL):
 │  │                          #   castle.ts (lattice + Nakime's shifts + turned rooms, + tests),
 │  │                          #   lines.ts (train paths, cars, great halls, + tests),
@@ -185,12 +186,14 @@ src/
   champagne; Cormorant Garamond (with lining figures, so "11" never reads
   "II") over Jost.
 - **The stage** (`liquid.ts`) is one WebGL canvas pinned for seven screens
-  of scroll: the wordmark rises out of the dark, then each featured lot
-  melts into the next. Both images are pushed along a swirling noise
-  field while a front sweeps up the stage, glowing and throwing off
-  sparks. The pointer stirs a flowmap (a 128² ping-pong buffer of velocity
-  that fades each frame), so the photo drags after the cursor like water,
-  with a little colour fringing. Without WebGL it crossfades plain photos.
+  of scroll: the wordmark rises out of the dark on a noise front that
+  sweeps up the stage, then each featured lot opens from its own centre.
+  Ahead of that front the photo arrives as particles (one per 3 px cell,
+  each with a fixed threshold) that slide home and fill in, the previous
+  piece breaks up the same way, and a ring of water pushes outwards
+  through the flowmap. The flowmap is a 128² ping-pong buffer of velocity
+  that fades each frame; the pointer stirs the same field, so the photo
+  drags after the cursor like water. Without WebGL it crossfades photos.
 - **Below it** the room's latest bids drift past, then every lot in four
   columns that scroll at different speeds (parallax), then the catalogue
   with departments, search and sorting. Scrolling is Lenis, inside the
@@ -204,6 +207,11 @@ src/
   is visible, more often on lots about to close, and only up to a ceiling
   that warms up as the close nears. Outbids, auto-bids, extensions and wins
   arrive as toasts. Lots that closed half a day ago are put back up.
+- **The footer** (`footer.tsx`) waits beneath every page: a clipped box
+  holds a sticky panel, so the page lifts off it like a curtain. The
+  panel drifts up into place and the gold "11bits" rises a letter at a
+  time under a slow shimmer, beside the salerooms' local clocks. On a
+  short screen it grows to fit and sticks by its bottom edge instead.
 - **Accounts** live in the visitor's browser (a demo: the password is
   hashed, never sent anywhere), with a one-click demo account. Bids,
   maximums and the watchlist persist; the window's ↺ resets the sale.
