@@ -16,7 +16,7 @@ import { Home } from "./home"
 import { LotPage } from "./lot"
 import { Catalogue } from "./lots"
 import { ShellContext, type Shell, type View } from "./shell"
-import { Footer } from "./home"
+import { Footer } from "./footer"
 import { useAuction } from "./store"
 import { EASE, Eyebrow, pauseClock } from "./ui"
 

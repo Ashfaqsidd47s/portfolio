@@ -1,8 +1,8 @@
 import * as React from "react"
 import { motion, useScroll, useSpring, useTransform, type MotionValue } from "motion/react"
-import { cn } from "@/lib/utils"
 import { currentBid, formatShort, BUYERS_PREMIUM } from "./auction"
-import { CATEGORIES, LOTS, type CatalogueLot } from "./catalogue"
+import { LOTS, type CatalogueLot } from "./catalogue"
+import { Footer } from "./footer"
 import { Catalogue, LotImage } from "./lots"
 import { useShell } from "./shell"
 import { bidderCity, bidderLabel, useAuction } from "./store"
@@ -181,79 +181,4 @@ function HowItWorks() {
   )
 }
 
-export function Footer() {
-  const shell = useShell()
-  const [email, setEmail] = React.useState("")
-  const [joined, setJoined] = React.useState(false)
-  return (
-    <footer data-eb-tone="dark" className="bg-eb-ink-2 px-5 pb-10 pt-20 text-eb-ivory @3xl:px-12">
-      <div className="mx-auto grid max-w-[1400px] gap-14 @3xl:grid-cols-[1.4fr_1fr_1fr]">
-        <div>
-          <p className="font-eb-serif text-5xl">
-            11<em>bits</em>
-          </p>
-          <p className="mt-4 max-w-sm font-eb-sans text-sm leading-relaxed text-eb-ivory/55">
-            Previews of every sale, results as they fall, and the occasional private offer. Once a week, never more.
-          </p>
-          <form
-            className="mt-6 flex max-w-sm border-b border-eb-ivory/30 focus-within:border-eb-ivory"
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (/^\S+@\S+\.\S+$/.test(email)) setJoined(true)
-            }}
-          >
-            <label className="flex-1">
-              <span className="sr-only">Email</span>
-              <input
-                type="email"
-                required
-                value={email}
-                disabled={joined}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Your email"
-                className="h-11 w-full bg-transparent font-eb-sans text-sm text-eb-ivory placeholder:text-eb-ivory/35 focus:outline-none"
-              />
-            </label>
-            <button type="submit" disabled={joined} className="font-eb-sans text-[0.66rem] uppercase tracking-[0.28em] text-eb-gold disabled:opacity-100">
-              {joined ? "Subscribed ✓" : "Subscribe"}
-            </button>
-          </form>
-        </div>
-        <FooterList
-          title="Departments"
-          items={CATEGORIES.map((c) => ({ label: c, onClick: () => shell.go({ name: "lots", category: c }) }))}
-        />
-        <FooterList
-          title="The house"
-          items={[
-            { label: "All lots", onClick: () => shell.go({ name: "lots" }) },
-            { label: "My bids", onClick: () => shell.go({ name: "account", tab: "bids" }) },
-            { label: "Watchlist", onClick: () => shell.go({ name: "account", tab: "watch" }) },
-          ]}
-        />
-      </div>
-      <div className="mx-auto mt-20 flex max-w-[1400px] flex-col gap-2 border-t border-eb-ivory/10 pt-6 font-eb-sans text-[0.68rem] tracking-wide text-eb-ivory/40 @3xl:flex-row @3xl:justify-between">
-        <p>© 2026 11bits Fine Auctions. A portfolio demo: lots, bidders and prices are fictional.</p>
-        <p>Photography via Unsplash, used as placeholders.</p>
-      </div>
-    </footer>
-  )
-}
-
-function FooterList({ title, items }: { title: string; items: { label: string; onClick: () => void }[] }) {
-  return (
-    <div>
-      <Eyebrow className="text-eb-ivory/45">{title}</Eyebrow>
-      <ul className="mt-5 grid gap-2.5">
-        {items.map((it) => (
-          <li key={it.label}>
-            <button type="button" onClick={it.onClick} className={cn("font-eb-serif text-lg text-eb-ivory/85 transition-colors hover:text-eb-gold")}>
-              {it.label}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
 

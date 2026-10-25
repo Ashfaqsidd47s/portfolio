@@ -16,7 +16,7 @@ import {
   type LotState,
 } from "./auction"
 import { LOTS, getLot, photoUrl, type CatalogueLot } from "./catalogue"
-import { Footer } from "./home"
+import { Footer } from "./footer"
 import { LotCard, StatusTag, WatchButton } from "./lots"
 import { useShell } from "./shell"
 import { bidderCity, bidderLabel, standing, useAuction } from "./store"
