@@ -7,6 +7,7 @@ import {
   Diamond,
   FileText,
   Gamepad2,
+  Gavel,
   Gem,
   Grid3x3,
   Joystick,
@@ -50,6 +51,7 @@ const projectInfo = () => import("@/apps/project-info")
 const extras: Record<string, Pick<AppDef, "icon" | "tint" | "load">> = {
   trypnow: { icon: Plane, tint: ["#2dd4bf", "#0f766e"], load: () => import("@/apps/trypnow") },
   "berkeley-diamonds": { icon: Diamond, tint: ["#f3d98b", "#1c2236"], load: () => import("@/apps/berkeley") },
+  "11bits": { icon: Gavel, tint: ["#e6cf9f", "#0b0a09"], load: () => import("@/apps/elevenbits") },
   suregem: { icon: Gem, tint: ["#7dd3fc", "#4338ca"], load: projectInfo },
   "11jobs": { icon: BriefcaseBusiness, tint: ["#c4b5fd", "#7c3aed"], load: projectInfo },
   "11matrix": { icon: ChartNoAxesCombined, tint: ["#fdba74", "#ea580c"], load: projectInfo },
