@@ -54,6 +54,15 @@ export const appsMeta: AppMeta[] = [
     window: { width: 980, height: 680, minWidth: 380, minHeight: 440 },
   },
   {
+    id: "11bits",
+    name: "11bits",
+    description: "Storefront for a luxury auction house: a liquid WebGL stage of featured lots, a parallax collection, and live bidding with proxy bids and anti-sniping.",
+    kind: "project",
+    column: "left",
+    resettable: true,
+    window: { width: 1180, height: 760, minWidth: 380, minHeight: 480 },
+  },
+  {
     id: "suregem",
     name: "SureGem",
     description: "Multi-vendor diamond and fine-jewelry marketplace.",
