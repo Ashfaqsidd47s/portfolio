@@ -6,7 +6,7 @@ import { currentBid, isOpen, outcome, type LotState } from "./auction"
 import { CATEGORIES, LOTS, photoUrl, type Category, type CatalogueLot } from "./catalogue"
 import { useShell } from "./shell"
 import { standing, useAuction } from "./store"
-import { Countdown, EASE, Eyebrow, Odometer, useNow } from "./ui"
+import { EASE, Eyebrow, Odometer, useNow } from "./ui"
 
 const STANDING_LABEL = {
   leading: "You're leading",
@@ -52,7 +52,7 @@ export function LotImage({
           onError={() => setBroken(true)}
           style={{ objectPosition: `${focus[0]}% ${focus[1]}%` }}
           className={cn(
-            "size-full object-cover transition-[opacity,transform] duration-[1.2s] ease-[cubic-bezier(0.16,1,0.3,1)]",
+            "size-full object-cover transition-[opacity,transform,filter] duration-[0.6s] ease-[cubic-bezier(0.16,1,0.3,1)]",
             loaded ? "opacity-100" : "opacity-0",
             imgClassName
           )}
@@ -125,10 +125,11 @@ export function LotCard({ lot, index = 0 }: { lot: CatalogueLot; index?: number 
   return (
     <motion.article
       layout
-      initial={{ opacity: 0, y: 30 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.8, ease: EASE, delay: Math.min(index, 8) * 0.05 }}
+      exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.18, ease: "easeIn" } }}
+      // Quick on a change of department: a short stagger, and cards that stay glide straight to their new places.
+      transition={{ duration: 0.45, ease: EASE, delay: Math.min(index, 6) * 0.03, layout: { duration: 0.4, ease: EASE } }}
       className="group relative"
     >
       <button
@@ -153,19 +154,71 @@ export function LotCard({ lot, index = 0 }: { lot: CatalogueLot; index?: number 
               <Odometer value={currentBid(state)} />
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-[0.6rem] uppercase tracking-[0.24em] text-eb-stone">{state.bids.length} bids</p>
-            <p className="mt-0.5 text-xs tracking-wider text-eb-taupe">
-              <Countdown endsAt={state.endsAt} />
-            </p>
-          </div>
+          <p className="text-right text-[0.6rem] uppercase tracking-[0.24em] text-eb-stone">{state.bids.length} bids</p>
         </div>
+        <LotTimer endsAt={state.endsAt} now={now} />
       </button>
       <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between">
         <StatusTag state={state} now={now} />
         <WatchButton lotId={lot.id} className="pointer-events-auto ml-auto opacity-90" />
       </div>
     </motion.article>
+  )
+}
+
+const UNITS = [
+  { label: "Days", ms: 86_400_000, of: Infinity },
+  { label: "Hrs", ms: 3_600_000, of: 24 },
+  { label: "Min", ms: 60_000, of: 60 },
+  { label: "Sec", ms: 1000, of: 60 },
+] as const
+
+/**
+ * The strip along the foot of a card: time left as four desk-calendar
+ * pages (a dark header band, the figure below with a fold across it), each
+ * turning over as its figure changes. Red when the lot is about to close.
+ */
+function LotTimer({ endsAt, now }: { endsAt: number; now: number }) {
+  const left = endsAt - now
+  const closing = left > 0 && left < 60 * 60_000
+  if (left <= 0) {
+    const date = new Date(endsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+    return (
+      <div className="mt-3 flex items-center justify-between bg-eb-ink/[0.04] px-3 py-2.5 font-eb-sans text-[0.6rem] uppercase tracking-[0.24em] text-eb-stone">
+        <span>Bidding closed</span>
+        <span>{date}</span>
+      </div>
+    )
+  }
+  const figures = UNITS.map((u) => ({ label: u.label, value: String(Math.floor(left / u.ms) % u.of).padStart(2, "0") }))
+  return (
+    <div className="mt-3 flex items-center gap-3 bg-eb-ink/[0.04] p-2 font-eb-sans" role="timer" aria-label={`Closes in ${figures.map((f) => `${f.value} ${f.label}`).join(" ")}`}>
+      <p className={cn("w-12 shrink-0 pl-1 text-[0.55rem] uppercase leading-snug tracking-[0.22em]", closing ? "text-eb-red" : "text-eb-stone")}>
+        {closing ? "Closing soon" : "Closes in"}
+      </p>
+      <div className="grid flex-1 grid-cols-4 gap-1.5" aria-hidden>
+        {figures.map((f) => (
+          <div key={f.label} className="overflow-hidden rounded-[3px] bg-eb-paper text-center shadow-[0_1px_0_rgba(11,10,9,0.08)] ring-1 ring-eb-ink/10">
+            <div className={cn("py-[3px] text-[0.5rem] uppercase tracking-[0.2em] text-eb-ivory/85", closing ? "bg-eb-red" : "bg-eb-ink")}>{f.label}</div>
+            <div className="relative h-7 overflow-hidden font-eb-serif text-lg leading-7 text-eb-ink">
+              <AnimatePresence initial={false} mode="popLayout">
+                <motion.span
+                  key={f.value}
+                  className="block"
+                  initial={{ y: "-60%", opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: "60%", opacity: 0 }}
+                  transition={{ duration: 0.35, ease: EASE }}
+                >
+                  {f.value}
+                </motion.span>
+              </AnimatePresence>
+              <span className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-eb-ink/10" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -233,7 +286,7 @@ export function Catalogue({ category: initial, compact }: { category?: Category;
                 {t}
                 {t === "Watchlist" && watch.length > 0 && <span className="ml-1.5 text-eb-gold-deep">{watch.length}</span>}
                 {category === t && (
-                  <motion.span layoutId="eb-tab-line" className="absolute inset-x-3 -bottom-px h-px bg-eb-ink" transition={{ duration: 0.5, ease: EASE }} />
+                  <motion.span layoutId="eb-tab-line" className="absolute inset-x-3 -bottom-px h-px bg-eb-ink" transition={{ duration: 0.3, ease: EASE }} />
                 )}
               </button>
             ))}
