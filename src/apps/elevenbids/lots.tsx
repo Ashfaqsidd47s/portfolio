@@ -1,5 +1,5 @@
 import * as React from "react"
-import { AnimatePresence, LayoutGroup, motion } from "motion/react"
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react"
 import { Heart, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { currentBid, isOpen, outcome, type LotState } from "./auction"
@@ -115,8 +115,8 @@ export function StatusTag({ state, now, className }: { state: LotState; now: num
   )
 }
 
-/** The catalogue card. */
-export function LotCard({ lot, index = 0 }: { lot: CatalogueLot; index?: number }) {
+/** The catalogue card. `ref` reaches the article, so the grid can lift it out as it leaves. */
+export function LotCard({ lot, index = 0, ref }: { lot: CatalogueLot; index?: number; ref?: React.Ref<HTMLElement> }) {
   const shell = useShell()
   const state = useAuction((s) => s.lots[lot.id])
   const now = useNow()
@@ -124,12 +124,13 @@ export function LotCard({ lot, index = 0 }: { lot: CatalogueLot; index?: number 
   const open = isOpen(state, now)
   return (
     <motion.article
+      ref={ref}
       layout
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.18, ease: "easeIn" } }}
-      // Quick on a change of department: a short stagger, and cards that stay glide straight to their new places.
-      transition={{ duration: 0.45, ease: EASE, delay: Math.min(index, 6) * 0.03, layout: { duration: 0.4, ease: EASE } }}
+      exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.15, ease: "easeIn" } }}
+      // Cards that stay glide straight to their new places; new ones follow a beat behind.
+      transition={{ duration: 0.35, ease: EASE, delay: 0.08 + Math.min(index, 6) * 0.025, layout: { duration: 0.32, ease: EASE } }}
       className="group relative"
     >
       <button
@@ -138,7 +139,10 @@ export function LotCard({ lot, index = 0 }: { lot: CatalogueLot; index?: number 
         className="block w-full text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-eb-gold"
         aria-label={`Lot ${lot.number}: ${lot.maker} ${lot.title}`}
       >
-        <LotImage lot={lot} width={720} className="aspect-[4/5]" imgClassName="group-hover:scale-[1.045]" sizes="(min-width: 900px) 25vw, 50vw" />
+        <div className="relative">
+          <LotImage lot={lot} width={720} className="aspect-[4/5]" imgClassName="group-hover:scale-[1.045]" sizes="(min-width: 900px) 25vw, 50vw" />
+          <LotTimer endsAt={state.endsAt} now={now} />
+        </div>
         <div className="mt-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <Eyebrow className="truncate text-eb-taupe">
@@ -156,7 +160,6 @@ export function LotCard({ lot, index = 0 }: { lot: CatalogueLot; index?: number 
           </div>
           <p className="text-right text-[0.6rem] uppercase tracking-[0.24em] text-eb-stone">{state.bids.length} bids</p>
         </div>
-        <LotTimer endsAt={state.endsAt} now={now} />
       </button>
       <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between">
         <StatusTag state={state} now={now} />
@@ -174,17 +177,18 @@ const UNITS = [
 ] as const
 
 /**
- * The strip along the foot of a card: time left as four desk-calendar
- * pages (a dark header band, the figure below with a fold across it), each
- * turning over as its figure changes. Red when the lot is about to close.
+ * Time left, along the foot of a card's photo: four desk-calendar pages
+ * (days, hours, minutes, seconds), each turning over in 3D as its figure
+ * changes. Red within the last hour; "Bidding closed" once it's over.
  */
 function LotTimer({ endsAt, now }: { endsAt: number; now: number }) {
   const left = endsAt - now
   const closing = left > 0 && left < 60 * 60_000
+  const shade = "pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-eb-ink/80 via-eb-ink/45 to-transparent font-eb-sans"
   if (left <= 0) {
     const date = new Date(endsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
     return (
-      <div className="mt-3 flex items-center justify-between bg-eb-ink/[0.04] px-3 py-2.5 font-eb-sans text-[0.6rem] uppercase tracking-[0.24em] text-eb-stone">
+      <div className={cn(shade, "flex items-center justify-between px-3 pb-3 pt-10 text-[0.6rem] uppercase tracking-[0.24em] text-eb-ivory/80")}>
         <span>Bidding closed</span>
         <span>{date}</span>
       </div>
@@ -192,32 +196,68 @@ function LotTimer({ endsAt, now }: { endsAt: number; now: number }) {
   }
   const figures = UNITS.map((u) => ({ label: u.label, value: String(Math.floor(left / u.ms) % u.of).padStart(2, "0") }))
   return (
-    <div className="mt-3 flex items-center gap-3 bg-eb-ink/[0.04] p-2 font-eb-sans" role="timer" aria-label={`Closes in ${figures.map((f) => `${f.value} ${f.label}`).join(" ")}`}>
-      <p className={cn("w-12 shrink-0 pl-1 text-[0.55rem] uppercase leading-snug tracking-[0.22em]", closing ? "text-eb-red" : "text-eb-stone")}>
+    <div className={cn(shade, "flex items-end gap-2.5 px-2.5 pb-2.5 pt-12")} role="timer" aria-label={`Closes in ${figures.map((f) => `${f.value} ${f.label}`).join(" ")}`}>
+      <p className={cn("w-11 shrink-0 pb-1 text-[0.52rem] uppercase leading-snug tracking-[0.22em]", closing ? "text-[#f0a597]" : "text-eb-ivory/75")}>
         {closing ? "Closing soon" : "Closes in"}
       </p>
       <div className="grid flex-1 grid-cols-4 gap-1.5" aria-hidden>
         {figures.map((f) => (
-          <div key={f.label} className="overflow-hidden rounded-[3px] bg-eb-paper text-center shadow-[0_1px_0_rgba(11,10,9,0.08)] ring-1 ring-eb-ink/10">
+          <div key={f.label} className="overflow-hidden rounded-[3px] bg-eb-paper text-center shadow-[0_2px_6px_rgba(11,10,9,0.35)]">
             <div className={cn("py-[3px] text-[0.5rem] uppercase tracking-[0.2em] text-eb-ivory/85", closing ? "bg-eb-red" : "bg-eb-ink")}>{f.label}</div>
-            <div className="relative h-7 overflow-hidden font-eb-serif text-lg leading-7 text-eb-ink">
-              <AnimatePresence initial={false} mode="popLayout">
-                <motion.span
-                  key={f.value}
-                  className="block"
-                  initial={{ y: "-60%", opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: "60%", opacity: 0 }}
-                  transition={{ duration: 0.35, ease: EASE }}
-                >
-                  {f.value}
-                </motion.span>
-              </AnimatePresence>
-              <span className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-eb-ink/10" />
-            </div>
+            <CalendarPage value={f.value} />
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+/**
+ * A figure on a desk calendar. When it changes, the old page lifts from the
+ * binding at its top edge and turns up and over in 3D, darkening as it
+ * tilts from the light, while the new page waits beneath in its shadow.
+ */
+function CalendarPage({ value }: { value: string }) {
+  const reduced = useReducedMotion()
+  const [shown, setShown] = React.useState(value)
+  const [leaving, setLeaving] = React.useState<{ value: string; turn: number } | null>(null)
+  // Turning pages is derived from the figure changing, not an effect.
+  if (value !== shown) {
+    setShown(value)
+    if (!reduced) setLeaving({ value: shown, turn: (leaving?.turn ?? 0) + 1 })
+  }
+  const page = "absolute inset-0 bg-eb-paper font-eb-serif text-lg leading-7 text-eb-ink"
+  return (
+    <div className="relative h-7 [perspective:220px]">
+      <div className={page}>{shown}</div>
+      {leaving && (
+        <>
+          {/* The new page sits in the shadow of the one lifting off it. */}
+          <motion.div
+            key={`shadow-${leaving.turn}`}
+            className="absolute inset-0 bg-gradient-to-b from-eb-ink/35 to-eb-ink/5"
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 0 }}
+            transition={{ duration: 0.55, ease: "easeOut" }}
+          />
+          <motion.div
+            key={leaving.turn}
+            className={cn(page, "origin-top [backface-visibility:hidden] [transform-style:preserve-3d]")}
+            initial={{ rotateX: 0 }}
+            animate={{ rotateX: 100 }}
+            transition={{ duration: 0.55, ease: [0.45, 0, 0.2, 1] }}
+            onAnimationComplete={() => setLeaving((l) => (l?.turn === leaving.turn ? null : l))}
+          >
+            {leaving.value}
+            <motion.span
+              className="absolute inset-0 bg-gradient-to-t from-eb-ink/45 to-eb-ink/10"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.55, ease: "easeIn" }}
+            />
+          </motion.div>
+        </>
+      )}
     </div>
   )
 }
@@ -232,23 +272,55 @@ const SORTS: { id: Sort; label: string }[] = [
   { id: "number", label: "Lot number" },
 ]
 
+/**
+ * Stands in for asking the sale's API for a department. The demo's lots are
+ * already in the page, so this only takes about as long as a quick request,
+ * which keeps the loading state honest for when a real API sits behind it.
+ */
+const REQUEST_MS = 320
+const requestDepartment = () => new Promise<void>((resolve) => window.setTimeout(resolve, REQUEST_MS))
+
 /** Every lot in the sale, with filters. Used on the landing page and as its own view. */
 export function Catalogue({ category: initial, compact }: { category?: Category; compact?: boolean }) {
   const lots = useAuction((s) => s.lots)
   const watch = useAuction((s) => s.watch)
   const now = useNow()
-  const [category, setCategory] = React.useState<Category | "All" | "Watchlist">(initial ?? "All")
+  type Tab = Category | "All" | "Watchlist"
+  // The tab picked moves at once; the cards change when its lots arrive.
+  const [category, setCategory] = React.useState<Tab>(initial ?? "All")
+  const [applied, setApplied] = React.useState<Tab>(initial ?? "All")
+  const [loading, setLoading] = React.useState(false)
+  const request = React.useRef(0)
   const [sort, setSort] = React.useState<Sort>("closing")
   const [query, setQuery] = React.useState("")
   const [showAll, setShowAll] = React.useState(!compact)
 
-  React.useEffect(() => {
-    if (initial) setCategory(initial)
-  }, [initial])
+  // Arriving from the header's department links picks that department.
+  const [from, setFrom] = React.useState(initial)
+  if (initial !== from) {
+    setFrom(initial)
+    if (initial) {
+      setCategory(initial)
+      setApplied(initial)
+    }
+  }
+
+  const pick = (t: Tab) => {
+    setCategory(t)
+    const id = ++request.current
+    if (t === applied) return setLoading(false)
+    setLoading(true)
+    void requestDepartment().then(() => {
+      // Only the latest pick lands.
+      if (request.current !== id) return
+      setApplied(t)
+      setLoading(false)
+    })
+  }
 
   const q = query.trim().toLowerCase()
   const list = LOTS.filter((l) => lots[l.id])
-    .filter((l) => (category === "All" ? true : category === "Watchlist" ? watch.includes(l.id) : l.category === category))
+    .filter((l) => (applied === "All" ? true : applied === "Watchlist" ? watch.includes(l.id) : l.category === applied))
     .filter((l) => !q || `${l.maker} ${l.title} ${l.subtitle} ${l.category}`.toLowerCase().includes(q))
     .sort((a, b) => {
       const sa = lots[a.id]
@@ -264,11 +336,30 @@ export function Catalogue({ category: initial, compact }: { category?: Category;
       return a.number - b.number
     })
   const shown = showAll ? list : list.slice(0, 8)
-  const tabs: (Category | "All" | "Watchlist")[] = ["All", ...CATEGORIES, "Watchlist"]
+  const tabs: Tab[] = ["All", ...CATEGORIES, "Watchlist"]
 
   return (
     <div>
-      <div className="flex flex-col gap-5 border-b border-eb-ink/10 pb-5 @4xl:flex-row @4xl:items-end @4xl:justify-between">
+      <div className="relative flex flex-col gap-5 border-b border-eb-ink/10 pb-5 @4xl:flex-row @4xl:items-end @4xl:justify-between">
+        {/* While a department loads, a short gold light runs along the rule. */}
+        <AnimatePresence>
+          {loading && (
+            <motion.div
+              className="pointer-events-none absolute inset-x-0 -bottom-px h-px overflow-hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.25 } }}
+              aria-hidden
+            >
+              <motion.span
+                className="absolute inset-y-0 w-1/4 bg-gradient-to-r from-transparent via-eb-gold-deep to-transparent"
+                initial={{ left: "-25%" }}
+                animate={{ left: "100%" }}
+                transition={{ duration: 0.9, ease: [0.45, 0, 0.55, 1], repeat: Infinity }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
         <LayoutGroup id="eb-tabs">
           <div className="-mx-1 flex gap-1 overflow-x-auto pb-1 [scrollbar-width:none]" role="tablist" aria-label="Category">
             {tabs.map((t) => (
@@ -277,7 +368,7 @@ export function Catalogue({ category: initial, compact }: { category?: Category;
                 type="button"
                 role="tab"
                 aria-selected={category === t}
-                onClick={() => setCategory(t)}
+                onClick={() => pick(t)}
                 className={cn(
                   "relative shrink-0 px-3 py-2 font-eb-sans text-[0.68rem] uppercase tracking-[0.2em] transition-colors",
                   category === t ? "text-eb-ink" : "text-eb-stone hover:text-eb-ink"
@@ -321,17 +412,23 @@ export function Catalogue({ category: initial, compact }: { category?: Category;
       </div>
 
       <p className="mt-5 font-eb-sans text-xs tracking-wide text-eb-stone" aria-live="polite">
-        {list.length} {list.length === 1 ? "lot" : "lots"}
-        {category === "Watchlist" && list.length === 0 && " — tap the heart on any lot to follow it here."}
+        {loading ? "Loading lots…" : `${list.length} ${list.length === 1 ? "lot" : "lots"}`}
+        {!loading && applied === "Watchlist" && list.length === 0 && " — tap the heart on any lot to follow it here."}
       </p>
 
-      <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-12 @md:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
+      {/* The cards on show stay, a little quieter, until the next department's arrive. */}
+      <motion.div
+        className="relative mt-6 grid grid-cols-1 gap-x-6 gap-y-12 @md:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4"
+        animate={{ opacity: loading ? 0.55 : 1 }}
+        transition={{ duration: 0.2 }}
+        aria-busy={loading}
+      >
         <AnimatePresence mode="popLayout">
           {shown.map((lot, i) => (
             <LotCard key={lot.id} lot={lot} index={i} />
           ))}
         </AnimatePresence>
-      </div>
+      </motion.div>
 
       {!showAll && list.length > shown.length && (
         <div className="mt-14 flex justify-center">
