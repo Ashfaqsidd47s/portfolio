@@ -185,19 +185,21 @@ src/
   motor cars, wine and collectibles, sold online lot by lot. Ink, ivory and
   champagne; Cormorant Garamond (with lining figures, so "11" never reads
   "II") over Jost.
-- **The opening** (`splash.tsx`): "11bids" rises a letter at a time in the
-  middle of the app, holds, then flies up and shrinks into the header's
-  logo, which takes over as it lands. A click skips the wait.
+- **The opening** (`splash.tsx`), a step at a time in about two and a half
+  seconds: "11bids" rises in the middle of the app, shrinks to the logo's
+  size, moves up to the header, the header unfolds sideways out of it, and
+  it slides into the logo's place as the first lot pours in. A click skips
+  to the end.
 - **The stage** (`liquid.ts`) is one WebGL canvas, one screen tall. The
-  featured lots take turns on their own (the active mark fills as a lot's
-  turn runs down). Each lot pours out from its own centre like water
-  spreading over a floor: the edge runs ahead in lobes that drift outward,
-  the image behind it is still stretching to fill, the previous piece is
-  shoved aside, and a ring of water pushes outwards through the flowmap.
-  Behind each photo, the same photo fills the stage, blurred and dimmed.
-  The flowmap is a 128² ping-pong buffer of velocity that fades each
-  frame; the pointer stirs the same field, so the photo drags after the
-  cursor like water. Without WebGL it crossfades photos.
+  first lot pours out from its own centre like water spreading over a
+  floor. After that the featured lots take turns on their own, every 5.5 s,
+  as if stood on a ring that turns about the stage's vertical axis: each
+  pixel's ray is traced onto the two cards' planes in perspective, so the
+  current piece swings back and away to one side as the next swings in
+  from the other. Behind each photo the same photo, uncropped, fills the
+  stage softly blurred and dimmed. The pointer stirs a flowmap (a 128²
+  ping-pong buffer of velocity that fades each frame), so the photo drags
+  after the cursor like water. Without WebGL it crossfades photos.
 - **Below it** the room's latest bids drift past, then every lot in four
   columns that scroll at different speeds (parallax), then the catalogue
   with departments, search and sorting. Scrolling is Lenis, inside the

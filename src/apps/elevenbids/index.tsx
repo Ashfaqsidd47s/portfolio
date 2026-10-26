@@ -148,7 +148,7 @@ export default function ElevenBids({ isVisible, isPhone }: AppProps) {
         </div>
 
         <Header menu={menu} setMenu={setMenu} compact={isPhone || size.width < 900} logo={logo} />
-        {splash !== "done" && <Splash logo={logo} onFly={() => setSplash("fly")} onDone={() => setSplash("done")} />}
+        {splash !== "done" && <Splash logo={logo} phase={splash} setPhase={setSplash} />}
         <MobileMenu open={menu} onClose={() => setMenu(false)} />
         <Toasts />
 
@@ -255,8 +255,18 @@ function Header({
   return (
     <motion.header
       ref={ref}
-      // During the splash the header waits; its logo appears as the splash lands on it.
-      animate={{ y: hidden && !menu && !openMenu ? "-110%" : "0%", opacity: shell.splash === "text" ? 0 : 1 }}
+      // During the splash the header waits, then unfolds sideways out of the
+      // mark sitting at its centre; its logo appears as the mark lands on it.
+      initial={{ opacity: 0, clipPath: `inset(0px ${shell.width / 2 - 48}px -2000px ${shell.width / 2 - 48}px)` }}
+      animate={{
+        y: hidden && !menu && !openMenu ? "-110%" : "0%",
+        opacity: shell.splash === "text" ? 0 : 1,
+        // Open, it reaches far below the header, so menus hanging off it never clip.
+        clipPath:
+          shell.splash === "text"
+            ? `inset(0px ${shell.width / 2 - 48}px -2000px ${shell.width / 2 - 48}px)`
+            : "inset(0px 0px -2000px 0px)",
+      }}
       transition={{ duration: 0.55, ease: EASE }}
       className={cn(
         "absolute inset-x-0 top-0 z-40 transition-[background-color,color,border-color,backdrop-filter] duration-500",

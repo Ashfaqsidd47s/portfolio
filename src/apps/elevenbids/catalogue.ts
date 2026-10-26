@@ -140,6 +140,7 @@ export const LOTS: CatalogueLot[] = [
     closesAfter: 2 * HOUR + 14 * MIN,
     appetite: 1.15,
     openingBids: 31,
+    featured: true,
   },
   {
     id: "porsche-911-turbo-s",
@@ -407,6 +408,7 @@ export const LOTS: CatalogueLot[] = [
     closesAfter: 19 * HOUR,
     appetite: 1.3,
     openingBids: 21,
+    featured: true,
   },
   {
     id: "air-jordan-1-1985",
@@ -484,6 +486,7 @@ export const LOTS: CatalogueLot[] = [
     closesAfter: 3 * DAY + 18 * HOUR,
     appetite: 1.18,
     openingBids: 6,
+    featured: true,
   },
   {
     id: "clive-christian-no1",
