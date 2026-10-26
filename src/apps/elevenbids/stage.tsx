@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { ArrowUpRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { currentBid, formatMoney, nextMinimum } from "./auction"
-import { drawPlaceholder, drawWordmark, fontsReady } from "./cards"
+import { drawPlaceholder } from "./cards"
 import { FEATURED, photoUrl, type CatalogueLot } from "./catalogue"
 import { LiquidStage, type Slide } from "./liquid"
 import { useShell } from "./shell"
@@ -25,45 +25,28 @@ export function stageLayout(width: number, height: number) {
   return { wide, photo: { x: (width - w) / 2, y: height * 0.12, w, h } }
 }
 
-function wordmarkRect(width: number, height: number): Rect {
-  const w = Math.min(width * (width < 600 ? 1.02 : 0.86), 1100)
-  const h = w / 2.4
-  return { x: (width - w) / 2, y: (height - h) / 2 - height * 0.03, w, h }
-}
-
-/** How long the wordmark holds the stage once it's up, before the first lot pours in. */
-const SPLASH_MS = 4200
+/** How long each featured lot holds the stage before the next pours in. */
+const ROTATE_MS = 7000
 
 /**
- * The landing page's pinned stage: one screen of scroll per featured lot.
- * The wordmark rises out of the dark as a splash when the app opens, then
- * melts into the first lot on its own; scrolling melts each lot into the next.
+ * The landing page's stage: one screen, the featured lots taking turns on
+ * their own, each pouring in from its centre. It waits for the opening
+ * splash, then starts with the first lot.
  */
 export function Stage() {
   const shell = useShell()
-  const { width, height, scroller, reduced, visible } = shell
+  const { width, height, scroller, reduced, visible, splash } = shell
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
   const sectionRef = React.useRef<HTMLElement>(null)
   const stageRef = React.useRef<LiquidStage | null>(null)
-  const wordmark = React.useRef<HTMLCanvasElement | null>(null)
   const [index, setIndex] = React.useState(0)
   const [ready, setReady] = React.useState(false)
   const [failed, setFailed] = React.useState(false)
-  const [splash, setSplash] = React.useState(!shell.splashed.current)
   const count = FEATURED.length
   const layout = stageLayout(width, height)
 
-  const endSplash = React.useCallback(() => {
-    shell.splashed.current = true
-    setSplash(false)
-  }, [shell.splashed])
-
   const slideFor = React.useCallback(
-    (i: number | "splash"): Slide | null => {
-      if (i === "splash") {
-        if (!wordmark.current) return null
-        return { source: wordmark.current, rect: wordmarkRect(width, height), fit: "contain", fallback: () => wordmark.current! }
-      }
+    (i: number): Slide => {
       const lot = FEATURED[i]
       return {
         source: photoUrl(lot.photos[0]?.src ?? "", 1400, 1750),
@@ -86,16 +69,8 @@ export function Stage() {
       return
     }
     stageRef.current = stage
-    let live = true
-    void fontsReady()
-      .then(drawWordmark)
-      .then((mark) => {
-        if (!live) return
-        wordmark.current = mark
-        setReady(true)
-      })
+    setReady(true)
     return () => {
-      live = false
       stage.dispose()
       stageRef.current = null
     }
@@ -104,51 +79,23 @@ export function Stage() {
 
   React.useEffect(() => {
     stageRef.current?.resize(width, height, Math.min(window.devicePixelRatio || 1, 1.75))
-    stageRef.current?.relayout((slide) => (slide.fit === "contain" ? wordmarkRect(width, height) : layout.photo))
+    stageRef.current?.relayout(() => layout.photo)
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [width, height])
 
   // Warm every featured photo so each melt starts the moment it's asked for.
   React.useEffect(() => {
     if (!ready) return
-    for (let i = 0; i < count; i++) {
-      const slide = slideFor(i)
-      if (slide) void stageRef.current?.load(slide)
-    }
+    for (let i = 0; i < count; i++) void stageRef.current?.load(slideFor(i))
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [ready])
 
+  // The first lot pours in as the splash flies to the header.
+  const started = splash !== "text"
   React.useEffect(() => {
-    if (!ready) return
-    const slide = slideFor(splash ? "splash" : index)
-    if (slide) void stageRef.current?.show(slide)
+    if (ready && started) void stageRef.current?.show(slideFor(index))
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, ready, splash])
-
-  // The splash holds the stage a moment, then gives way to the lots.
-  React.useEffect(() => {
-    if (!splash || !(ready || failed)) return
-    const timer = setTimeout(endSplash, reduced ? 1800 : SPLASH_MS)
-    return () => clearTimeout(timer)
-  }, [splash, ready, failed, reduced, endSplash])
-
-  // Scroll picks the slide.
-  React.useEffect(() => {
-    const el = scroller.current
-    const section = sectionRef.current
-    if (!el || !section) return
-    const onScroll = () => {
-      const travel = section.offsetHeight - el.clientHeight
-      const p = travel > 0 ? (el.scrollTop - section.offsetTop) / travel : 0
-      const i = Math.max(0, Math.min(count - 1, Math.floor(p * count * 0.999 + 0.0001)))
-      setIndex(i)
-      // Scrolling on means the visitor is past the splash.
-      if (el.scrollTop - section.offsetTop > 24) endSplash()
-    }
-    onScroll()
-    el.addEventListener("scroll", onScroll, { passive: true })
-    return () => el.removeEventListener("scroll", onScroll)
-  }, [scroller, count, height, endSplash])
+  }, [index, ready, started])
 
   // Draw while the window can be seen and the stage is on screen.
   const [onScreen, setOnScreen] = React.useState(true)
@@ -173,87 +120,88 @@ export function Stage() {
     return () => cancelAnimationFrame(raf)
   }, [visible, onScreen, failed])
 
-  const jump = (i: number) => {
-    const el = scroller.current
-    const section = sectionRef.current
-    if (!el || !section) return
-    const travel = section.offsetHeight - el.clientHeight
-    endSplash()
-    const top = section.offsetTop + ((i + 0.5) / count) * travel
-    if (shell.lenis.current) shell.lenis.current.scrollTo(top, { duration: 1.4 })
-    else el.scrollTo({ top, behavior: reduced ? "auto" : "smooth" })
-  }
+  // The lots take turns while the stage can be seen; picking one restarts the clock.
+  const rotating = splash === "done" && visible && onScreen
+  React.useEffect(() => {
+    if (!rotating) return
+    const id = window.setTimeout(() => setIndex((i) => (i + 1) % count), ROTATE_MS)
+    return () => window.clearTimeout(id)
+  }, [rotating, index, count])
 
-  const lot = splash ? null : FEATURED[index]
+  const lot = splash === "done" ? FEATURED[index] : null
 
   return (
-    <section ref={sectionRef} aria-label="Featured lots" className="relative bg-eb-ink" style={{ height: height * (count + 0.6) }}>
-      <div className="sticky top-0 overflow-hidden" style={{ height }}>
-        <canvas
-          ref={canvasRef}
-          className={cn("absolute inset-0 size-full", lot && "cursor-pointer")}
-          aria-hidden
-          onPointerMove={(e) => {
-            const r = e.currentTarget.getBoundingClientRect()
-            stageRef.current?.pointer(e.clientX - r.left, e.clientY - r.top)
-          }}
-          onPointerLeave={() => stageRef.current?.leave()}
-          onClick={(e) => {
-            if (!lot) return
-            const r = e.currentTarget.getBoundingClientRect()
-            const x = e.clientX - r.left
-            const y = e.clientY - r.top
-            const p = layout.photo
-            if (x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h) shell.go({ name: "lot", id: lot.id })
-          }}
-        />
-        {failed && <StaticStage lot={lot} />}
+    <section ref={sectionRef} aria-label="Featured lots" className="relative overflow-hidden bg-eb-ink" style={{ height }}>
+      <canvas
+        ref={canvasRef}
+        className={cn("absolute inset-0 size-full", lot && "cursor-pointer")}
+        aria-hidden
+        onPointerMove={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          stageRef.current?.pointer(e.clientX - r.left, e.clientY - r.top)
+        }}
+        onPointerLeave={() => stageRef.current?.leave()}
+        onClick={(e) => {
+          if (!lot) return
+          const r = e.currentTarget.getBoundingClientRect()
+          const x = e.clientX - r.left
+          const y = e.clientY - r.top
+          const p = layout.photo
+          if (x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h) shell.go({ name: "lot", id: lot.id })
+        }}
+      />
+      {failed && <StaticStage lot={started ? FEATURED[index] : null} />}
 
-        <h1 className="sr-only">11bids — fine auctions</h1>
+      <h1 className="sr-only">11bids — fine auctions</h1>
 
-        <AnimatePresence>
-          {splash && (
-            <motion.p
-              key="intro"
-              className="pointer-events-none absolute inset-x-0 bottom-0 mx-auto max-w-[34ch] px-6 pb-14 text-center font-eb-serif text-lg italic text-eb-ivory/70 @3xl:text-xl"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { delay: ready ? 1.6 : 0, duration: 1.2 } }}
-              exit={{ opacity: 0, transition: { duration: 0.4 } }}
-            >
-              Rare watches, handbags, jewels and motor cars, sold to the room one bid at a time.
-            </motion.p>
-          )}
-        </AnimatePresence>
+      <AnimatePresence>{lot && <LotCopy key={lot.id} lot={lot} wide={layout.wide} photo={layout.photo} />}</AnimatePresence>
 
-        <AnimatePresence>{lot && <LotCopy key={lot.id} lot={lot} wide={layout.wide} photo={layout.photo} />}</AnimatePresence>
-
-        <nav
-          aria-label="Featured lots"
-          className={cn(
-            "absolute flex gap-3",
-            layout.wide ? "right-6 top-1/2 -translate-y-1/2 flex-col" : "inset-x-0 bottom-4 justify-center"
-          )}
-        >
-          {Array.from({ length: count }, (_, i) => (
+      <motion.nav
+        aria-label="Featured lots"
+        className={cn("absolute flex gap-3", layout.wide ? "right-6 top-1/2 -translate-y-1/2 flex-col" : "inset-x-0 bottom-4 justify-center")}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: lot ? 1 : 0 }}
+        transition={{ duration: 0.8 }}
+      >
+        {Array.from({ length: count }, (_, i) => {
+          const active = i === index
+          return (
             <button
               key={i}
               type="button"
-              onClick={() => jump(i)}
+              onClick={() => setIndex(i)}
               aria-label={`Lot ${FEATURED[i].number}: ${FEATURED[i].title}`}
-              aria-current={!splash && i === index}
+              aria-current={active}
               className="group grid place-items-center p-1"
             >
+              {/* The active mark fills as its lot's turn runs down. */}
               <span
                 className={cn(
-                  "block bg-eb-ivory transition-all duration-700",
+                  "relative block overflow-hidden transition-all duration-700",
                   layout.wide ? "w-px" : "h-px",
-                  !splash && i === index ? (layout.wide ? "h-8 opacity-100" : "w-8 opacity-100") : layout.wide ? "h-3 opacity-30 group-hover:opacity-70" : "w-3 opacity-30 group-hover:opacity-70"
+                  active
+                    ? layout.wide
+                      ? "h-8 bg-eb-ivory/30"
+                      : "w-8 bg-eb-ivory/30"
+                    : layout.wide
+                      ? "h-3 bg-eb-ivory/30 group-hover:bg-eb-ivory/70"
+                      : "w-3 bg-eb-ivory/30 group-hover:bg-eb-ivory/70"
                 )}
-              />
+              >
+                {active && (
+                  <motion.span
+                    key={`${index}-${rotating}`}
+                    className={cn("absolute inset-0 bg-eb-ivory", layout.wide ? "origin-top" : "origin-left")}
+                    initial={rotating && !reduced ? (layout.wide ? { scaleY: 0 } : { scaleX: 0 }) : false}
+                    animate={layout.wide ? { scaleY: 1 } : { scaleX: 1 }}
+                    transition={{ duration: ROTATE_MS / 1000, ease: "linear" }}
+                  />
+                )}
+              </span>
             </button>
-          ))}
-        </nav>
-      </div>
+          )
+        })}
+      </motion.nav>
     </section>
   )
 }
@@ -364,13 +312,13 @@ function LotCopy({ lot, wide, photo }: { lot: CatalogueLot; wide: boolean; photo
   )
 }
 
-/** Without WebGL: the same story as a plain crossfade. */
+/** Without WebGL: the same lots as a plain crossfade. */
 function StaticStage({ lot }: { lot: CatalogueLot | null }) {
   const { width, height } = useShell()
   const { photo } = stageLayout(width, height)
   return (
     <AnimatePresence>
-      {lot ? (
+      {lot && (
         <motion.img
           key={lot.id}
           src={photoUrl(lot.photos[0]?.src ?? "", 1000, 1250)}
@@ -382,18 +330,6 @@ function StaticStage({ lot }: { lot: CatalogueLot | null }) {
           exit={{ opacity: 0 }}
           transition={{ duration: 1.2, ease: EASE }}
         />
-      ) : (
-        <motion.p
-          key="mark"
-          className="absolute inset-0 grid place-items-center font-eb-serif text-[18cqw] text-eb-ivory"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          <span>
-            11<em>bids</em>
-          </span>
-        </motion.p>
       )}
     </AnimatePresence>
   )

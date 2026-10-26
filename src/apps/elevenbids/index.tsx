@@ -16,6 +16,7 @@ import { Home } from "./home"
 import { LotPage } from "./lot"
 import { Catalogue } from "./lots"
 import { ShellContext, type Shell, type View } from "./shell"
+import { Splash } from "./splash"
 import { Footer } from "./footer"
 import { useAuction } from "./store"
 import { EASE, Eyebrow, pauseClock } from "./ui"
@@ -34,7 +35,8 @@ export default function ElevenBids({ isVisible, isPhone }: AppProps) {
   const scroller = React.useRef<HTMLDivElement>(null)
   const content = React.useRef<HTMLDivElement>(null)
   const lenis = React.useRef<Lenis | null>(null)
-  const splashed = React.useRef(false)
+  const logo = React.useRef<HTMLButtonElement>(null)
+  const [splash, setSplash] = React.useState<Shell["splash"]>("text")
   const [size, setSize] = React.useState({ width: 1024, height: 720 })
   const [stack, setStack] = React.useState<View[]>([{ name: "home" }])
   const view = stack[stack.length - 1]
@@ -117,7 +119,7 @@ export default function ElevenBids({ isVisible, isPhone }: AppProps) {
     reviewBid,
     scroller,
     lenis,
-    splashed,
+    splash,
     width: size.width,
     height: size.height,
     visible: isVisible,
@@ -145,7 +147,8 @@ export default function ElevenBids({ isVisible, isPhone }: AppProps) {
           </div>
         </div>
 
-        <Header menu={menu} setMenu={setMenu} compact={isPhone || size.width < 900} />
+        <Header menu={menu} setMenu={setMenu} compact={isPhone || size.width < 900} logo={logo} />
+        {splash !== "done" && <Splash logo={logo} onFly={() => setSplash("fly")} onDone={() => setSplash("done")} />}
         <MobileMenu open={menu} onClose={() => setMenu(false)} />
         <Toasts />
 
@@ -190,7 +193,17 @@ function LotsPage({ category }: { category?: (typeof CATEGORIES)[number] }) {
 }
 
 /** Light text over the dark stage, dark text over paper; tucks away while you read downwards. */
-function Header({ menu, setMenu, compact }: { menu: boolean; setMenu: (v: boolean) => void; compact: boolean }) {
+function Header({
+  menu,
+  setMenu,
+  compact,
+  logo,
+}: {
+  menu: boolean
+  setMenu: (v: boolean) => void
+  compact: boolean
+  logo: React.RefObject<HTMLButtonElement | null>
+}) {
   const shell = React.useContext(ShellContext)!
   const account = useAuction((s) => s.account)
   const watching = useAuction((s) => s.watch.length)
@@ -242,7 +255,8 @@ function Header({ menu, setMenu, compact }: { menu: boolean; setMenu: (v: boolea
   return (
     <motion.header
       ref={ref}
-      animate={{ y: hidden && !menu && !openMenu ? "-110%" : "0%" }}
+      // During the splash the header waits; its logo appears as the splash lands on it.
+      animate={{ y: hidden && !menu && !openMenu ? "-110%" : "0%", opacity: shell.splash === "text" ? 0 : 1 }}
       transition={{ duration: 0.55, ease: EASE }}
       className={cn(
         "absolute inset-x-0 top-0 z-40 transition-[background-color,color,border-color,backdrop-filter] duration-500",
@@ -251,7 +265,14 @@ function Header({ menu, setMenu, compact }: { menu: boolean; setMenu: (v: boolea
       )}
     >
       <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between gap-6 px-5 @3xl:px-12">
-        <button type="button" onClick={() => shell.go({ name: "home" })} className="font-eb-serif text-[1.7rem] leading-none tracking-tight" aria-label="11bids home">
+        <button
+          ref={logo}
+          type="button"
+          onClick={() => shell.go({ name: "home" })}
+          className="font-eb-serif text-[1.7rem] leading-none tracking-tight"
+          style={{ opacity: shell.splash === "done" ? 1 : 0 }}
+          aria-label="11bids home"
+        >
           11<em>bids</em>
         </button>
         {!compact && (

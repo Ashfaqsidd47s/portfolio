@@ -18,8 +18,8 @@ export type Shell = {
   reviewBid: (lotId: string, amount: number, max?: number) => void
   scroller: React.RefObject<HTMLDivElement | null>
   lenis: React.RefObject<Lenis | null>
-  /** The wordmark splash has played since the app opened, so coming home goes straight to the lots. */
-  splashed: React.RefObject<boolean>
+  /** The opening: "11bids" on its own, then flying to the header, then done (once per open). */
+  splash: "text" | "fly" | "done"
   /** The app's own height in px: a window, a phone, or the journey. */
   height: number
   width: number
