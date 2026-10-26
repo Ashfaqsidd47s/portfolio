@@ -25,13 +25,13 @@ export function stageLayout(width: number, height: number) {
   return { wide, photo: { x: (width - w) / 2, y: height * 0.12, w, h } }
 }
 
-/** How long each featured lot holds the stage before the next pours in. */
-const ROTATE_MS = 7000
+/** How long each featured lot holds the stage before the ring turns to the next. */
+const ROTATE_MS = 5500
 
 /**
  * The landing page's stage: one screen, the featured lots taking turns on
- * their own, each pouring in from its centre. It waits for the opening
- * splash, then starts with the first lot.
+ * their own as if stood on a turning ring. It waits for the opening splash,
+ * then pours in the first lot.
  */
 export function Stage() {
   const shell = useShell()
@@ -53,6 +53,7 @@ export function Stage() {
         rect: stageLayout(width, height).photo,
         fit: "cover",
         fallback: () => drawPlaceholder(lot.maker, lot.title),
+        backdrop: photoUrl(lot.photos[0]?.src ?? "", 480),
       }
     },
     [width, height]
@@ -90,10 +91,15 @@ export function Stage() {
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [ready])
 
-  // The first lot pours in as the splash flies to the header.
-  const started = splash !== "text"
+  // The first lot pours in as the splash settles into the logo.
+  const started = splash === "settle" || splash === "done"
+  // The ring turns the short way round: back to an earlier lot comes in from the left.
+  const shown = React.useRef(index)
   React.useEffect(() => {
-    if (ready && started) void stageRef.current?.show(slideFor(index))
+    if (!ready || !started) return
+    const step = (index - shown.current + count) % count
+    shown.current = index
+    void stageRef.current?.show(slideFor(index), step > count / 2 ? -1 : 1)
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [index, ready, started])
 

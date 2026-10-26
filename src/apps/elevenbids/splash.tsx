@@ -1,7 +1,7 @@
 import * as React from "react"
-import { motion } from "motion/react"
+import { motion, useAnimate } from "motion/react"
 import { fontsReady } from "./cards"
-import { useShell } from "./shell"
+import { useShell, type Shell } from "./shell"
 import { EASE } from "./ui"
 
 const LETTERS = [
@@ -13,17 +13,25 @@ const LETTERS = [
   { ch: "s", italic: true },
 ]
 
+type Phase = Shell["splash"]
+const ORDER: Phase[] = ["text", "nav", "settle", "done"]
+
 /**
- * The opening: "11bids" rises a letter at a time in the middle of the app,
- * holds, then flies up and shrinks into the header's logo, which takes over
- * as it lands. A click skips the wait.
+ * The opening, a step at a time: "11bids" rises in the middle of the app,
+ * shrinks to the logo's size, moves up to the header, the header unfolds out
+ * of it, then it slides into the logo's place (as the first lot pours in)
+ * and the logo takes over. A click skips to the end.
  */
-export function Splash({ logo, onFly, onDone }: { logo: React.RefObject<HTMLElement | null>; onFly: () => void; onDone: () => void }) {
+export function Splash({ logo, phase, setPhase }: { logo: React.RefObject<HTMLElement | null>; phase: Phase; setPhase: (p: Phase) => void }) {
   const { reduced, width } = useShell()
-  const ref = React.useRef<HTMLParagraphElement>(null)
+  const [scope, animate] = useAnimate<HTMLParagraphElement>()
   const [ready, setReady] = React.useState(false)
-  const [to, setTo] = React.useState<{ x: number; y: number; scale: number } | null>(null)
   const [skip, setSkip] = React.useState(false)
+
+  // Phases only move forward, whichever of the sequence or a skip gets there first.
+  const advance = React.useEffectEvent((next: Phase) => {
+    if (ORDER.indexOf(next) > ORDER.indexOf(phase)) setPhase(next)
+  })
 
   React.useEffect(() => {
     let live = true
@@ -33,29 +41,54 @@ export function Splash({ logo, onFly, onDone }: { logo: React.RefObject<HTMLElem
     }
   }, [])
 
-  const fly = React.useEffectEvent(() => {
-    const from = ref.current?.getBoundingClientRect()
+  const run = React.useEffectEvent(async (isLive: () => boolean) => {
+    const el = scope.current
     const dest = logo.current?.getBoundingClientRect()
-    onFly()
-    if (!from || !dest || !from.width || reduced) return onDone()
-    setTo({ x: dest.left - from.left, y: dest.top - from.top, scale: dest.width / from.width })
+    const from = el?.getBoundingClientRect()
+    if (reduced || !el || !dest || !from?.width) {
+      advance("settle")
+      return advance("done")
+    }
+    // The letters have just risen; give them a beat.
+    await new Promise((r) => window.setTimeout(r, 900))
+    if (!isLive()) return
+    const ease = EASE as [number, number, number, number]
+    await animate(el, { scale: dest.width / from.width }, { duration: 0.4, ease })
+    if (!isLive()) return
+    const dy = dest.top + dest.height / 2 - (from.top + from.height / 2)
+    await animate(el, { y: dy }, { duration: 0.4, ease })
+    if (!isLive()) return
+    advance("nav")
+    await new Promise((r) => window.setTimeout(r, 320))
+    if (!isLive()) return
+    advance("settle")
+    const dx = dest.left + dest.width / 2 - (from.left + from.width / 2)
+    await animate(el, { x: dx }, { duration: 0.5, ease })
+    if (isLive()) advance("done")
   })
 
   React.useEffect(() => {
-    if (!ready || to) return
-    const id = window.setTimeout(fly, skip ? 0 : reduced ? 900 : 2300)
-    return () => window.clearTimeout(id)
-  }, [ready, to, skip, reduced])
+    if (!ready) return
+    let live = true
+    void run(() => live)
+    return () => {
+      live = false
+    }
+  }, [ready])
+
+  React.useEffect(() => {
+    if (!skip) return
+    advance("settle")
+    advance("done")
+  }, [skip])
 
   return (
     <div className="absolute inset-0 z-50 grid place-items-center" onClick={() => setSkip(true)} aria-hidden>
-      <motion.p
-        ref={ref}
+      <p
+        ref={scope}
         className="font-eb-serif leading-none tracking-tight text-eb-ivory"
-        style={{ fontSize: Math.min(width * 0.17, 210), transformOrigin: "0 0" }}
-        animate={to ?? { x: 0, y: 0, scale: 1 }}
-        transition={{ duration: 1.1, ease: EASE }}
-        onAnimationComplete={() => to && onDone()}
+        // A dark halo, so the mark reads over the header as it unfolds beneath.
+        style={{ fontSize: Math.min(width * 0.17, 210), textShadow: "0 0 0.3em #0b0a09, 0 0 0.12em #0b0a09" }}
       >
         {LETTERS.map((l, i) => (
           <motion.span
@@ -63,12 +96,12 @@ export function Splash({ logo, onFly, onDone }: { logo: React.RefObject<HTMLElem
             className={l.italic ? "inline-block italic" : "inline-block"}
             initial={{ opacity: 0, y: "0.3em", filter: "blur(10px)" }}
             animate={ready ? { opacity: 1, y: 0, filter: "blur(0px)" } : undefined}
-            transition={{ duration: reduced ? 0.01 : 1, ease: EASE, delay: reduced ? 0 : 0.15 + i * 0.09 }}
+            transition={{ duration: reduced ? 0.01 : 0.55, ease: EASE, delay: reduced ? 0 : 0.05 + i * 0.045 }}
           >
             {l.ch}
           </motion.span>
         ))}
-      </motion.p>
+      </p>
     </div>
   )
 }
