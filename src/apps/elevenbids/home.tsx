@@ -103,7 +103,7 @@ function Collection() {
           </h2>
         </div>
       </div>
-      <div className="absolute inset-0 flex gap-[1.6cqw] px-[1.6cqw]">
+      <div className="absolute inset-0 flex gap-[0.8cqw] px-[1.6cqw]">
         {cols.map((lots, c) => (
           <Column key={c} lots={lots} y={y[c]} top={offsets[c]} />
         ))}
@@ -118,7 +118,7 @@ function Column({ lots, y, top }: { lots: CatalogueLot[]; y: MotionValue<number>
   const shell = useShell()
   const states = useAuction((s) => s.lots)
   return (
-    <motion.div className="relative flex min-w-0 flex-1 flex-col gap-[1.6cqw]" style={{ y, top }}>
+    <motion.div className="relative flex min-w-0 flex-1 flex-col gap-[0.8cqw]" style={{ y, top }}>
       {lots.map((lot) => (
         <button
           key={lot.id}
@@ -127,7 +127,7 @@ function Column({ lots, y, top }: { lots: CatalogueLot[]; y: MotionValue<number>
           className="group relative block w-full shrink-0 overflow-hidden text-left focus-visible:outline-2 focus-visible:outline-eb-gold"
           aria-label={`${lot.maker} ${lot.title}`}
         >
-          <LotImage lot={lot} width={640} className="aspect-[4/5]" imgClassName="scale-[1.02] group-hover:scale-[1.08] grayscale-[0.25] group-hover:grayscale-0" />
+          <LotImage lot={lot} width={640} className="aspect-[4/5]" imgClassName="grayscale-[0.25] group-hover:grayscale-0" />
           <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-eb-ink/85 via-eb-ink/0 to-transparent p-[clamp(0.75rem,1.4cqw,1.25rem)] opacity-0 transition-opacity duration-500 group-hover:opacity-100 group-focus-visible:opacity-100">
             <p className="font-eb-sans text-[0.58rem] uppercase tracking-[0.28em] text-eb-gold">{lot.maker}</p>
             <p className="mt-1 font-eb-serif text-[clamp(1rem,1.6cqw,1.4rem)] leading-tight text-eb-ivory">{lot.title}</p>
