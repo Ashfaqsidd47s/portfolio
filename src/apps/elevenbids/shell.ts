@@ -18,6 +18,8 @@ export type Shell = {
   reviewBid: (lotId: string, amount: number, max?: number) => void
   scroller: React.RefObject<HTMLDivElement | null>
   lenis: React.RefObject<Lenis | null>
+  /** The wordmark splash has played since the app opened, so coming home goes straight to the lots. */
+  splashed: React.RefObject<boolean>
   /** The app's own height in px: a window, a phone, or the journey. */
   height: number
   width: number
@@ -29,6 +31,6 @@ export const ShellContext = React.createContext<Shell | null>(null)
 
 export function useShell() {
   const shell = React.useContext(ShellContext)
-  if (!shell) throw new Error("useShell outside 11bits")
+  if (!shell) throw new Error("useShell outside 11bids")
   return shell
 }

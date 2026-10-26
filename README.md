@@ -91,7 +91,7 @@ src/
 │  └─ kernel/                 # seeded randomness, crash-proof localStorage
 ├─ apps/                      # one folder per app, each its own chunk
 │  ├─ trypnow/                # supplier + agent demo: builder, AI listing, bookings, marketplace
-│  ├─ elevenbits/             # 11bits, a luxury auction storefront: auction.ts (bid rules, + tests),
+│  ├─ elevenbids/             # 11bids, a luxury auction storefront: auction.ts (bid rules, + tests),
 │  │                          #   store.ts (the live room, accounts), catalogue.ts (lots + photos),
 │  │                          #   liquid.ts (WebGL melt + flowmap), stage, lots, lot page, dialogs,
 │  │                          #   footer (the curtain reveal)
@@ -179,19 +179,20 @@ src/
 - **Demo data** is seeded (same for every visitor), saved in the visitor's
   browser, and resettable from the app.
 
-### 11bits (`/apps/11bits`)
+### 11bids (`/apps/11bids`)
 
 - **A storefront for a luxury auction house**: watches, handbags, jewels,
   motor cars, wine and collectibles, sold online lot by lot. Ink, ivory and
   champagne; Cormorant Garamond (with lining figures, so "11" never reads
   "II") over Jost.
-- **The stage** (`liquid.ts`) is one WebGL canvas pinned for seven screens
-  of scroll: the wordmark rises out of the dark on a noise front that
-  sweeps up the stage, then each featured lot opens from its own centre.
-  Ahead of that front the photo arrives as particles (one per 3 px cell,
-  each with a fixed threshold) that slide home and fill in, the previous
-  piece breaks up the same way, and a ring of water pushes outwards
-  through the flowmap. The flowmap is a 128² ping-pong buffer of velocity
+- **The stage** (`liquid.ts`) is one WebGL canvas pinned for six screens
+  of scroll. When the app opens, the wordmark rises out of the dark on a
+  noise front that sweeps up the stage as a splash, then melts into the
+  first featured lot on its own; scrolling melts each lot into the next.
+  A lot pours out from its own centre like water spreading over a floor:
+  the edge runs ahead in lobes that drift outward, the image behind it is
+  still stretching to fill, the previous piece is shoved aside, and a ring
+  of water pushes outwards through the flowmap. The flowmap is a 128² ping-pong buffer of velocity
   that fades each frame; the pointer stirs the same field, so the photo
   drags after the cursor like water. Without WebGL it crossfades photos.
 - **Below it** the room's latest bids drift past, then every lot in four
@@ -209,7 +210,7 @@ src/
   arrive as toasts. Lots that closed half a day ago are put back up.
 - **The footer** (`footer.tsx`) waits beneath every page: a clipped box
   holds a sticky panel, so the page lifts off it like a curtain. The
-  panel drifts up into place and the gold "11bits" rises a letter at a
+  panel drifts up into place and the gold "11bids" rises a letter at a
   time under a slow shimmer, beside the salerooms' local clocks. On a
   short screen it grows to fit and sticks by its bottom edge instead.
 - **Accounts** live in the visitor's browser (a demo: the password is

@@ -14,7 +14,7 @@ const SALEROOMS = [
   ["Dubai", "Asia/Dubai"],
 ] as const
 
-const MARK = ["1", "1", "b", "i", "t", "s"]
+const MARK = ["1", "1", "b", "i", "d", "s"]
 
 /**
  * The house's sign-off: a full-screen footer that waits beneath the page.
@@ -97,7 +97,7 @@ export function Footer() {
               {/* Sized to the screen as well as the width, so the whole footer fits in one view. */}
               <Wordmark progress={progress} size={Math.max(72, Math.min(shell.width * 0.26, view * 0.27))} />
               <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-4 border-t border-eb-ivory/10 py-5 font-eb-sans text-[0.64rem] tracking-wide text-eb-ivory/40">
-                <p className="min-w-0">© 2026 11bits Fine Auctions · A portfolio demo: lots, bidders and prices are fictional · Photography via Unsplash</p>
+                <p className="min-w-0">© 2026 11bids Fine Auctions · A portfolio demo: lots, bidders and prices are fictional · Photography via Unsplash</p>
                 <button
                   type="button"
                   onClick={toTop}
@@ -120,11 +120,11 @@ export function Footer() {
   )
 }
 
-/** "11bits" across the full width, each letter rising on its own beat. */
+/** "11bids" across the full width, each letter rising on its own beat. */
 function Wordmark({ progress, size }: { progress: MotionValue<number>; size: number }) {
   return (
     <p
-      aria-label="11bits"
+      aria-label="11bids"
       role="img"
       className="relative mx-auto mt-2 flex w-full justify-center overflow-hidden font-eb-serif leading-[0.95] tracking-[-0.03em]"
       style={{ fontSize: size }}

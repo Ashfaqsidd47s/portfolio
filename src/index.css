@@ -130,7 +130,7 @@
   --color-tn-mint: #e3f3f0;
   --color-tn-bg: #f6fbfa;
 
-  /* 11bits — a luxury auction house: ink, ivory and champagne in every theme */
+  /* 11bids — a luxury auction house: ink, ivory and champagne in every theme */
   --font-eb-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
   --font-eb-sans: "Jost", "Futura", "Avenir Next", ui-sans-serif, system-ui, sans-serif;
   --color-eb-ink: #0b0a09;
@@ -531,20 +531,20 @@
     radial-gradient(1px 1px at 62% 4%, #fff 50%, transparent 51%);
 }
 
-/* 11bits: the room's ticker drifts by at a constant pace */
+/* 11bids: the room's ticker drifts by at a constant pace */
 @keyframes eb-marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
 
-/* 11bits: Cormorant's old-style "1" reads as a capital I, so the house sets
+/* 11bids: Cormorant's old-style "1" reads as a capital I, so the house sets
    every figure lining (and tabular, so prices don't shuffle as they climb). */
 [data-eb-root],
 [data-eb-root] * {
   font-variant-numeric: lining-nums tabular-nums;
 }
 
-/* 11bits: light drifting across the footer's gold wordmark */
+/* 11bids: light drifting across the footer's gold wordmark */
 @keyframes eb-shimmer {
   0%, 100% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }

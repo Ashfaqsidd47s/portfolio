@@ -23,17 +23,18 @@ import { EASE, Eyebrow, pauseClock } from "./ui"
 const viewKey = (v: View) => (v.name === "lot" ? `lot:${v.id}` : v.name === "lots" ? `lots:${v.category ?? ""}` : v.name)
 
 /**
- * 11bits: a storefront for a luxury auction house. A liquid WebGL stage
+ * 11bids: a storefront for a luxury auction house. A liquid WebGL stage
  * melts from the house's wordmark through its featured lots; below it the
  * whole sale drifts past in parallax, then the catalogue, every lot's page
  * and a live room of bidders, with proxy bids and anti-sniping.
  */
-export default function ElevenBits({ isVisible, isPhone }: AppProps) {
+export default function ElevenBids({ isVisible, isPhone }: AppProps) {
   const reduced = useReducedMotion() ?? false
   const rootRef = React.useRef<HTMLDivElement>(null)
   const scroller = React.useRef<HTMLDivElement>(null)
   const content = React.useRef<HTMLDivElement>(null)
   const lenis = React.useRef<Lenis | null>(null)
+  const splashed = React.useRef(false)
   const [size, setSize] = React.useState({ width: 1024, height: 720 })
   const [stack, setStack] = React.useState<View[]>([{ name: "home" }])
   const view = stack[stack.length - 1]
@@ -116,6 +117,7 @@ export default function ElevenBits({ isVisible, isPhone }: AppProps) {
     reviewBid,
     scroller,
     lenis,
+    splashed,
     width: size.width,
     height: size.height,
     visible: isVisible,
@@ -249,8 +251,8 @@ function Header({ menu, setMenu, compact }: { menu: boolean; setMenu: (v: boolea
       )}
     >
       <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between gap-6 px-5 @3xl:px-12">
-        <button type="button" onClick={() => shell.go({ name: "home" })} className="font-eb-serif text-[1.7rem] leading-none tracking-tight" aria-label="11bits home">
-          11<em>bits</em>
+        <button type="button" onClick={() => shell.go({ name: "home" })} className="font-eb-serif text-[1.7rem] leading-none tracking-tight" aria-label="11bids home">
+          11<em>bids</em>
         </button>
         {!compact && (
           <nav aria-label="Departments" className="flex items-center gap-7">

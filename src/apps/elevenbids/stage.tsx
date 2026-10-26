@@ -1,6 +1,6 @@
 import * as React from "react"
 import { AnimatePresence, motion } from "motion/react"
-import { ArrowDown, ArrowUpRight } from "lucide-react"
+import { ArrowUpRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { currentBid, formatMoney, nextMinimum } from "./auction"
 import { drawPlaceholder, drawWordmark, fontsReady } from "./cards"
@@ -31,9 +31,13 @@ function wordmarkRect(width: number, height: number): Rect {
   return { x: (width - w) / 2, y: (height - h) / 2 - height * 0.03, w, h }
 }
 
+/** How long the wordmark holds the stage once it's up, before the first lot pours in. */
+const SPLASH_MS = 4200
+
 /**
- * The landing page's pinned stage: one screen of scroll per slide. The
- * wordmark first, then each featured lot melts into the next.
+ * The landing page's pinned stage: one screen of scroll per featured lot.
+ * The wordmark rises out of the dark as a splash when the app opens, then
+ * melts into the first lot on its own; scrolling melts each lot into the next.
  */
 export function Stage() {
   const shell = useShell()
@@ -45,16 +49,22 @@ export function Stage() {
   const [index, setIndex] = React.useState(0)
   const [ready, setReady] = React.useState(false)
   const [failed, setFailed] = React.useState(false)
-  const count = FEATURED.length + 1
+  const [splash, setSplash] = React.useState(!shell.splashed.current)
+  const count = FEATURED.length
   const layout = stageLayout(width, height)
 
+  const endSplash = React.useCallback(() => {
+    shell.splashed.current = true
+    setSplash(false)
+  }, [shell.splashed])
+
   const slideFor = React.useCallback(
-    (i: number): Slide | null => {
-      if (i === 0) {
+    (i: number | "splash"): Slide | null => {
+      if (i === "splash") {
         if (!wordmark.current) return null
         return { source: wordmark.current, rect: wordmarkRect(width, height), fit: "contain", fallback: () => wordmark.current! }
       }
-      const lot = FEATURED[i - 1]
+      const lot = FEATURED[i]
       return {
         source: photoUrl(lot.photos[0]?.src ?? "", 1400, 1750),
         rect: stageLayout(width, height).photo,
@@ -71,7 +81,7 @@ export function Stage() {
     try {
       stage = new LiquidStage(canvasRef.current!, reduced)
     } catch (error) {
-      console.warn("11bits: the liquid stage is off, showing photos instead.", error)
+      console.warn("11bids: the liquid stage is off, showing photos instead.", error)
       setFailed(true)
       return
     }
@@ -94,14 +104,14 @@ export function Stage() {
 
   React.useEffect(() => {
     stageRef.current?.resize(width, height, Math.min(window.devicePixelRatio || 1, 1.75))
-    stageRef.current?.relayout({ a: index === 0 ? undefined : layout.photo, b: index === 0 ? wordmarkRect(width, height) : layout.photo })
+    stageRef.current?.relayout((slide) => (slide.fit === "contain" ? wordmarkRect(width, height) : layout.photo))
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [width, height])
 
   // Warm every featured photo so each melt starts the moment it's asked for.
   React.useEffect(() => {
     if (!ready) return
-    for (let i = 1; i < count; i++) {
+    for (let i = 0; i < count; i++) {
       const slide = slideFor(i)
       if (slide) void stageRef.current?.load(slide)
     }
@@ -110,10 +120,17 @@ export function Stage() {
 
   React.useEffect(() => {
     if (!ready) return
-    const slide = slideFor(index)
+    const slide = slideFor(splash ? "splash" : index)
     if (slide) void stageRef.current?.show(slide)
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, ready])
+  }, [index, ready, splash])
+
+  // The splash holds the stage a moment, then gives way to the lots.
+  React.useEffect(() => {
+    if (!splash || !(ready || failed)) return
+    const timer = setTimeout(endSplash, reduced ? 1800 : SPLASH_MS)
+    return () => clearTimeout(timer)
+  }, [splash, ready, failed, reduced, endSplash])
 
   // Scroll picks the slide.
   React.useEffect(() => {
@@ -125,11 +142,13 @@ export function Stage() {
       const p = travel > 0 ? (el.scrollTop - section.offsetTop) / travel : 0
       const i = Math.max(0, Math.min(count - 1, Math.floor(p * count * 0.999 + 0.0001)))
       setIndex(i)
+      // Scrolling on means the visitor is past the splash.
+      if (el.scrollTop - section.offsetTop > 24) endSplash()
     }
     onScroll()
     el.addEventListener("scroll", onScroll, { passive: true })
     return () => el.removeEventListener("scroll", onScroll)
-  }, [scroller, count, height])
+  }, [scroller, count, height, endSplash])
 
   // Draw while the window can be seen and the stage is on screen.
   const [onScreen, setOnScreen] = React.useState(true)
@@ -159,12 +178,13 @@ export function Stage() {
     const section = sectionRef.current
     if (!el || !section) return
     const travel = section.offsetHeight - el.clientHeight
+    endSplash()
     const top = section.offsetTop + ((i + 0.5) / count) * travel
     if (shell.lenis.current) shell.lenis.current.scrollTo(top, { duration: 1.4 })
     else el.scrollTo({ top, behavior: reduced ? "auto" : "smooth" })
   }
 
-  const lot = index > 0 ? FEATURED[index - 1] : null
+  const lot = splash ? null : FEATURED[index]
 
   return (
     <section ref={sectionRef} aria-label="Featured lots" className="relative bg-eb-ink" style={{ height: height * (count + 0.6) }}>
@@ -189,31 +209,19 @@ export function Stage() {
         />
         {failed && <StaticStage lot={lot} />}
 
-        <h1 className="sr-only">11bits — fine auctions</h1>
+        <h1 className="sr-only">11bids — fine auctions</h1>
 
         <AnimatePresence>
-          {index === 0 && (
-            <motion.div
+          {splash && (
+            <motion.p
               key="intro"
-              className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-5 pb-10 text-center text-eb-ivory"
+              className="pointer-events-none absolute inset-x-0 bottom-0 mx-auto max-w-[34ch] px-6 pb-14 text-center font-eb-serif text-lg italic text-eb-ivory/70 @3xl:text-xl"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1, transition: { delay: ready ? 1.6 : 0, duration: 1.2 } }}
               exit={{ opacity: 0, transition: { duration: 0.4 } }}
             >
-              <p className="max-w-[34ch] px-6 font-eb-serif text-lg italic text-eb-ivory/70 @3xl:text-xl">
-                Rare watches, handbags, jewels and motor cars, sold to the room one bid at a time.
-              </p>
-              <button
-                type="button"
-                className="pointer-events-auto flex flex-col items-center gap-2 font-eb-sans text-[0.62rem] uppercase tracking-[0.34em] text-eb-ivory/60 transition-colors hover:text-eb-ivory"
-                onClick={() => jump(1)}
-              >
-                Enter the sale
-                <motion.span animate={reduced ? undefined : { y: [0, 6, 0] }} transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}>
-                  <ArrowDown className="size-4" strokeWidth={1.25} />
-                </motion.span>
-              </button>
-            </motion.div>
+              Rare watches, handbags, jewels and motor cars, sold to the room one bid at a time.
+            </motion.p>
           )}
         </AnimatePresence>
 
@@ -231,15 +239,15 @@ export function Stage() {
               key={i}
               type="button"
               onClick={() => jump(i)}
-              aria-label={i === 0 ? "11bits" : `Lot ${FEATURED[i - 1].number}: ${FEATURED[i - 1].title}`}
-              aria-current={i === index}
+              aria-label={`Lot ${FEATURED[i].number}: ${FEATURED[i].title}`}
+              aria-current={!splash && i === index}
               className="group grid place-items-center p-1"
             >
               <span
                 className={cn(
                   "block bg-eb-ivory transition-all duration-700",
                   layout.wide ? "w-px" : "h-px",
-                  i === index ? (layout.wide ? "h-8 opacity-100" : "w-8 opacity-100") : layout.wide ? "h-3 opacity-30 group-hover:opacity-70" : "w-3 opacity-30 group-hover:opacity-70"
+                  !splash && i === index ? (layout.wide ? "h-8 opacity-100" : "w-8 opacity-100") : layout.wide ? "h-3 opacity-30 group-hover:opacity-70" : "w-3 opacity-30 group-hover:opacity-70"
                 )}
               />
             </button>
@@ -383,7 +391,7 @@ function StaticStage({ lot }: { lot: CatalogueLot | null }) {
           exit={{ opacity: 0 }}
         >
           <span>
-            11<em>bits</em>
+            11<em>bids</em>
           </span>
         </motion.p>
       )}

@@ -19,7 +19,7 @@ import {
 import { LOTS, getLot, type CatalogueLot } from "./catalogue"
 
 /**
- * 11bits' in-browser auction house: the live state of every lot, the room
+ * 11bids' in-browser auction house: the live state of every lot, the room
  * of other bidders, and the visitor's account, bids and watchlist. Seeded,
  * so everyone opens on the same sale, then persisted per visitor.
  */
@@ -104,7 +104,7 @@ function seedSale(now: number, seed = 11) {
 /** Tiny one-way hash: demo accounts live in this browser only, never sent anywhere. */
 function keyOf(email: string, password: string) {
   let h = 2166136261
-  for (const ch of `${email.toLowerCase()}:${password}:11bits`) {
+  for (const ch of `${email.toLowerCase()}:${password}:11bids`) {
     h ^= ch.codePointAt(0)!
     h = Math.imul(h, 16777619)
   }
@@ -251,7 +251,7 @@ export const useAuction = create<State>()(
           if (get().accounts.some((a) => a.email === clean)) return "An account with this email already exists. Sign in instead."
           const account = { name: name.trim(), email: clean }
           set((s) => ({ accounts: [...s.accounts, { ...account, key: keyOf(clean, password) }], account }))
-          toast({ tone: "good", title: `Welcome to 11bits, ${account.name.split(" ")[0]}`, body: "Your paddle is ready. Happy bidding." })
+          toast({ tone: "good", title: `Welcome to 11bids, ${account.name.split(" ")[0]}`, body: "Your paddle is ready. Happy bidding." })
           return null
         },
 
@@ -277,7 +277,7 @@ export const useAuction = create<State>()(
       }
     },
     {
-      name: "11bits",
+      name: "11bids",
       version: 1,
       storage: safeStorage(),
       partialize: ({ lots, account, accounts, watch, settled }) => ({ lots, account, accounts, watch, settled }),
@@ -288,7 +288,7 @@ export const useAuction = create<State>()(
 
 const money = (n: number) => `$${n.toLocaleString("en-US")}`
 
-onReset("11bits", () => useAuction.getState().reset())
+onReset("11bids", () => useAuction.getState().reset())
 
 export type LotView = CatalogueLot & { state: LotState }
 

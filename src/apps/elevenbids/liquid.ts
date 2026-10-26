@@ -1,16 +1,16 @@
 /**
  * The landing page's stage: one full-bleed WebGL canvas that shows one
- * "slide" at a time (the 11bits wordmark, then each featured lot) and melts
+ * "slide" at a time (the 11bids wordmark, then each featured lot) and melts
  * from one to the next like ink poured through water.
  *
  * - A slide is a texture drawn into a rectangle of the stage, cover- or
  *   contain-fitted. Its edges ripple with the image, so a photo bleeds into
  *   the dark rather than sliding as a card.
  * - Changing slide runs a noise-thresholded dissolve. For the wordmark the
- *   front sweeps up the stage; a photo opens from its own centre instead,
- *   arriving as particles that converge into place while a ring of water
- *   pushes out through the flowmap (the same water the pointer stirs). The
- *   front glows champagne and throws off sparks.
+ *   front sweeps up the stage and throws off sparks; a photo pours out from
+ *   its own centre instead, its edge running outward in lobes like spilled
+ *   water while a ring of water pushes out through the flowmap (the same
+ *   water the pointer stirs). The front glows champagne.
  * - The pointer stirs a flowmap (a small ping-pong framebuffer of velocity
  *   that fades each frame), which drags the image's pixels after the cursor
  *   with a touch of colour fringing, like a hand through still water.
@@ -111,6 +111,8 @@ uniform float uLoadedA;
 uniform float uLoadedB;
 // 0: the front sweeps up the stage (the wordmark). 1: it opens from the centre of the new image.
 uniform float uMode;
+// 1 while a photo pours in and its ring of water is still settling, then 0.
+uniform float uPour;
 ${NOISE}
 
 // x: image aspect, y: 1 for contain, 0 for cover.
@@ -133,6 +135,14 @@ vec4 sampleSlide(sampler2D tex, vec4 rect, vec2 fit, vec2 uv) {
   return vec4(c.rgb, c.a * inside);
 }
 
+// Soft 1 inside a slide's rectangle, so a pour stays within the frame.
+float rectMask(vec4 rect, vec2 uv) {
+  vec2 local = (uv - rect.xy) / rect.zw;
+  vec2 px = 1.5 / (rect.zw * uRes);
+  vec2 e = smoothstep(vec2(0.0), px, local) * smoothstep(vec2(0.0), px, 1.0 - local);
+  return e.x * e.y;
+}
+
 vec3 champagne = vec3(0.86, 0.72, 0.47);
 
 void main() {
@@ -148,7 +158,7 @@ void main() {
   float t = uTime;
   vec2 swirl = vec2(fbm(uv * 3.0 + vec2(t * 0.05, 0.0)), fbm(uv * 3.0 + vec2(0.0, t * 0.05) + 7.3)) - 0.5;
   float md = length((uv - uMouse) * aspect);
-  float ripple = sin(md * 60.0 - t * 5.0) * exp(-md * 7.0) * uHover;
+  float ripple = sin(md * 60.0 - t * 5.0) * exp(-md * 8.75) * uHover;
   vec2 rippleDir = normalize((uv - uMouse) * aspect + 1e-5) / aspect;
 
   vec2 base = uv - f * 0.11 + swirl * 0.004 + rippleDir * ripple * 0.004;
@@ -172,28 +182,30 @@ void main() {
     uvA = base + push * 0.18 * mixv + vec2(sin(uv.y * 18.0 + t * 2.0), 0.0) * 0.012 * wave;
     uvB = base - push * 0.18 * (1.0 - mixv) + vec2(sin(uv.y * 14.0 - t * 2.0), 0.0) * 0.012 * wave;
   } else {
-    // The new piece opens from its own centre. Ahead of the front it
-    // arrives as scattered particles (one per 3 px cell, each with a fixed
-    // threshold) that slide home and fill in; the old piece breaks up the
-    // same way, and a ring of water ripples out with the edge.
+    // The new piece pours out from its own centre like water spreading over
+    // a floor: the edge runs ahead in lobes that drift outward with the flow,
+    // the image behind it is still stretching out to fill, and the old piece
+    // is shoved aside ahead of it while rings ripple out with the edge.
     vec2 c = uRectB.xy + uRectB.zw * 0.5;
     vec2 rel = (uv - c) * aspect;
     float radius = length(uRectB.zw * 0.5 * aspect);
     float d = length(rel) / radius;
-    float front = d + (n - 0.5) * 0.45;
-    float th = p * 1.6 - 0.25;
-    float grain = hash(floor(uv * uRes / 3.0));
-    float density = smoothstep(th + 0.38, th - 0.02, front);
-    mixv = max(smoothstep(th + 0.02, th - 0.06, front), step(grain, density));
-    float justTurned = smoothstep(0.12, 0.0, abs(grain - density)) * step(th - 0.04, front);
-    band = (justTurned + (1.0 - smoothstep(0.0, 0.05, abs(front - th))) * 0.5) * wave;
-    vec2 outward = normalize(rel + 1e-5) / aspect;
-    float ringWave = sin(d * 34.0 - t * 7.0) * exp(-abs(front - th) * 6.0) * wave;
-    vec2 water = outward * ringWave * 0.006 + swirl * 0.03 * wave;
-    // Specks still arriving sit a little further out than home.
-    float scatter = (1.0 - density) * step(th - 0.04, front);
-    uvB = base - water - outward * scatter * 0.06 * grain;
-    uvA = base - water + outward * mixv * 0.02;
+    vec2 dir = rel / max(length(rel), 1e-4);
+    float flowN = fbm(dir * (1.8 + (d - p * 1.4) * 1.6) + vec2(3.1, 7.7) + swirl);
+    float front = d + (flowN - 0.5) * 0.5 + (n - 0.5) * 0.15;
+    float th = p * 1.9 - 0.45;
+    float edge = front - th;
+    mixv = smoothstep(0.03, -0.05, edge);
+    // Anything the front never quite reached settles in as it finishes.
+    mixv = mix(mixv, 1.0, smoothstep(0.85, 1.0, p));
+    band = (1.0 - smoothstep(0.0, 0.035, abs(edge))) * wave;
+    vec2 outward = dir / aspect;
+    float ringWave = sin(d * 30.0 - t * 6.0) * exp(-abs(edge) * 5.0) * wave;
+    vec2 water = outward * ringWave * 0.005 + swirl * 0.02 * wave;
+    float spread = exp(-max(-edge, 0.0) * 3.0) * wave;
+    float shove = smoothstep(0.35, 0.0, edge) * step(0.0, edge) * wave;
+    uvB = base - water - outward * spread * 0.05 * (0.6 + flowN * 0.8);
+    uvA = base - water - outward * shove * 0.04;
   }
 
   // Colour fringing follows the water's speed. Only blue trails, so edges
@@ -205,6 +217,10 @@ void main() {
   b.b = sampleSlide(uB, uRectB, uFitB, uvB - fr).b;
   a.a *= uLoadedA;
   b.a *= uLoadedB;
+  // The pour drags pixels outward; keep a photo inside its own frame while it
+  // does. At rest the frame's edges follow the water again.
+  b.a *= mix(1.0, rectMask(uRectB, uv), uPour);
+  if (uFitA.y < 0.5) a.a *= mix(1.0, rectMask(uRectA, uv), uPour);
 
   // Ink-dark ground with a faint warm smoke.
   float smoke = fbm(uv * 1.6 + swirl + vec2(t * 0.02, -t * 0.015));
@@ -220,9 +236,10 @@ void main() {
   col += champagne * caustic * 0.25;
   col += champagne * length(f) * 0.08;
 
-  // The dissolving front: a glowing seam that breaks into sparks.
-  float spark = step(0.975, hash(floor(uv * uRes / 2.0) + floor(t * 14.0))) * band;
-  col += champagne * band * 0.45 + vec3(1.0, 0.93, 0.8) * spark * 0.8;
+  // The dissolving front: a glowing seam. The wordmark's breaks into sparks;
+  // a photo's is a soft meniscus of light on the water's edge.
+  float spark = step(0.975, hash(floor(uv * uRes / 2.0) + floor(t * 14.0))) * band * (1.0 - uMode);
+  col += champagne * band * mix(0.45, 0.3, uMode) + vec3(1.0, 0.93, 0.8) * spark * 0.8;
 
   // Vignette and grain.
   float vig = smoothstep(1.25, 0.35, length((uv - 0.5) * aspect * 0.95));
@@ -280,6 +297,8 @@ export class LiquidStage {
   private duration = 1.6
   /** The melt opens from the new image's centre (photos) rather than sweeping up (the wordmark). */
   private radial = false
+  /** 1 while a photo pours in, easing to 0 as its water settles. */
+  private pour = 0
   private queued: Slide | null = null
   private loading = false
 
@@ -417,9 +436,9 @@ export class LiquidStage {
   }
 
   /** The current slides moved (the stage was resized). */
-  relayout(rects: { a?: Slide["rect"]; b: Slide["rect"] }) {
-    if (this.b) this.b.slide = { ...this.b.slide, rect: rects.b }
-    if (this.a && rects.a) this.a.slide = { ...this.a.slide, rect: rects.a }
+  relayout(rectFor: (slide: Slide) => Slide["rect"]) {
+    if (this.b) this.b.slide = { ...this.b.slide, rect: rectFor(this.b.slide) }
+    if (this.a) this.a.slide = { ...this.a.slide, rect: rectFor(this.a.slide) }
   }
 
   resize(width: number, height: number, dpr: number) {
@@ -460,6 +479,7 @@ export class LiquidStage {
     dt = Math.min(dt, 1 / 20)
     this.time += dt
     if (this.progress < 1) this.progress = Math.min(1, this.progress + dt / this.duration)
+    this.pour = this.radial && this.progress < 1 && !this.reduced ? 1 : Math.max(0, this.pour - dt * 1.2)
     this.hover += ((this.hovering && !this.reduced ? 1 : 0) - this.hover) * Math.min(1, dt * 4)
 
     // Flowmap step.
@@ -474,7 +494,7 @@ export class LiquidStage {
     const k = this.reduced ? 0 : 1
     gl.uniform2f(this.flow.u("uVelocity"), this.velocity.x * k, this.velocity.y * k)
     gl.uniform1f(this.flow.u("uAspect"), this.width / this.height)
-    gl.uniform1f(this.flow.u("uFalloff"), 0.22)
+    gl.uniform1f(this.flow.u("uFalloff"), 0.176)
     gl.uniform1f(this.flow.u("uDissipation"), Math.pow(0.93, dt * 60))
     // The reveal's ring of water: out from the new photo's centre, strongest mid-melt.
     const ring = this.b?.slide.rect
@@ -520,6 +540,7 @@ export class LiquidStage {
     gl.uniform1f(this.main.u("uLoadedA"), a ? 1 : 0)
     gl.uniform1f(this.main.u("uLoadedB"), b ? 1 : 0)
     gl.uniform1f(this.main.u("uMode"), this.radial ? 1 : 0)
+    gl.uniform1f(this.main.u("uPour"), this.pour)
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
   }
 
