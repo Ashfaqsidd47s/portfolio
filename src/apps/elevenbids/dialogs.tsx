@@ -96,7 +96,7 @@ export function AuthDialog({
   }
 
   const demo = () => {
-    const email = "guest@11bits.demo"
+    const email = "guest@11bids.demo"
     const password = "rare-things-11"
     const existing = useAuction.getState().accounts.some((a) => a.email === email)
     const err = existing ? signIn(email, password) : signUp("Guest Collector", email, password)
@@ -109,7 +109,7 @@ export function AuthDialog({
     <Dialog open={open} onClose={onClose} label={mode === "in" ? "Sign in" : "Create an account"} className="max-w-[440px]">
       <div className="px-8 pb-8 pt-10 @lg:px-10">
         <p className="text-center font-eb-serif text-3xl">
-          11<em>bits</em>
+          11<em>bids</em>
         </p>
         <div className="mt-6 grid grid-cols-2 border-b border-eb-ink/10" role="tablist">
           {(["in", "up"] as const).map((m) => (

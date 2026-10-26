@@ -39,7 +39,7 @@ const W = 2400
 const H = 1000
 
 /**
- * "11bits" in ivory, the "bits" in italic, on transparent ground.
+ * "11bids" in ivory, the "bids" in italic, on transparent ground.
  *
  * Drawn from an SVG rather than canvas text, because canvas can't ask for
  * Cormorant's lining figures, and its old-style "11" reads as "II".
@@ -57,7 +57,7 @@ export async function drawWordmark() {
 <defs><style>${faces.join("")}text{font-variant-numeric:lining-nums}</style>
 <linearGradient id="g" x1="0" y1="220" x2="0" y2="700" gradientUnits="userSpaceOnUse">
 <stop offset="0" stop-color="#fbf7ef"/><stop offset="0.55" stop-color="#f1e7d4"/><stop offset="1" stop-color="#cbb185"/></linearGradient></defs>
-<text x="${W / 2}" y="640" text-anchor="middle" fill="url(#g)" font-family="EB Serif" font-size="520"><tspan font-weight="500">11</tspan><tspan font-style="italic" font-weight="400">bits</tspan></text>
+<text x="${W / 2}" y="640" text-anchor="middle" fill="url(#g)" font-family="EB Serif" font-size="520"><tspan font-weight="500">11</tspan><tspan font-style="italic" font-weight="400">bids</tspan></text>
 <text x="${W / 2}" y="800" text-anchor="middle" fill="rgba(201,169,110,0.9)" font-family="EB Sans" font-size="46" letter-spacing="26">FINE AUCTIONS</text>
 <rect x="${W / 2 - 400}" y="786" width="150" height="2" fill="rgba(201,169,110,0.9)"/>
 <rect x="${W / 2 + 250}" y="786" width="150" height="2" fill="rgba(201,169,110,0.9)"/>
@@ -91,8 +91,8 @@ function drawWordmarkText() {
   ctx.font = upright
   const w11 = ctx.measureText("11").width
   ctx.font = italic
-  const wBits = ctx.measureText("bits").width
-  const x = (W - w11 - wBits) / 2
+  const wBids = ctx.measureText("bids").width
+  const x = (W - w11 - wBids) / 2
   const fill = ctx.createLinearGradient(0, 220, 0, 700)
   fill.addColorStop(0, "#fbf7ef")
   fill.addColorStop(0.55, "#f1e7d4")
@@ -101,7 +101,7 @@ function drawWordmarkText() {
   ctx.font = upright
   ctx.fillText("11", x, 640)
   ctx.font = italic
-  ctx.fillText("bits", x + w11, 640)
+  ctx.fillText("bids", x + w11, 640)
   ctx.font = `400 46px ${SANS}`
   ctx.fillStyle = "rgba(201, 169, 110, 0.9)"
   ctx.textAlign = "center"
