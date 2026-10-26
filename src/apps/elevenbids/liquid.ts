@@ -111,8 +111,6 @@ uniform vec2 uFitB;
 uniform vec2 uRes;
 uniform float uProgress;
 uniform float uTime;
-uniform vec2 uMouse;
-uniform float uHover;
 uniform float uLoadedA;
 uniform float uLoadedB;
 // 0: the front sweeps up the stage (the wordmark). 1: it opens from the centre of the new image.
@@ -161,11 +159,11 @@ vec3 backdrop(sampler2D tex, float ia, vec2 uv) {
   vec3 c = texture2D(tex, st).rgb;
   for (int i = 0; i < 8; i++) {
     float an = float(i) * 0.785398;
-    c += texture2D(tex, st + vec2(cos(an), sin(an)) * 0.03).rgb;
+    c += texture2D(tex, st + vec2(cos(an), sin(an)) * 0.027).rgb;
   }
   c /= 9.0;
   float l = dot(c, vec3(0.299, 0.587, 0.114));
-  return mix(vec3(l), c, 0.7) * 0.3;
+  return mix(vec3(l), c, 0.7) * 0.33;
 }
 
 // 1 at a slide's frame, falling off outside it: a soft shadow under the photo.
@@ -181,16 +179,12 @@ void main() {
   // Pointer flow: drags pixels after the cursor.
   vec4 flow = texture2D(uFlow, uv);
   vec2 f = (flow.rg - 0.5) * 2.0;
-  float energy = flow.b;
 
-  // A slow water surface under everything, stronger where the pointer rests.
+  // A slow water surface under everything.
   float t = uTime;
   vec2 swirl = vec2(fbm(uv * 3.0 + vec2(t * 0.05, 0.0)), fbm(uv * 3.0 + vec2(0.0, t * 0.05) + 7.3)) - 0.5;
-  float md = length((uv - uMouse) * aspect);
-  float ripple = sin(md * 60.0 - t * 5.0) * exp(-md * 8.75) * uHover;
-  vec2 rippleDir = normalize((uv - uMouse) * aspect + 1e-5) / aspect;
 
-  vec2 base = uv - f * 0.11 + swirl * 0.004 + rippleDir * ripple * 0.004;
+  vec2 base = uv - f * 0.11 + swirl * 0.004;
 
   float p = uProgress;
   float wave = sin(p * 3.14159);
@@ -266,9 +260,7 @@ void main() {
   col = mix(col, a.rgb, a.a * (1.0 - mixv));
   col = mix(col, b.rgb, b.a * mixv);
 
-  // Caustic highlights where the water is stirred.
-  float caustic = pow(abs(sin((uv.x + uv.y + f.x * 0.6) * 40.0 + t)), 18.0) * energy;
-  col += champagne * caustic * 0.25;
+  // A faint warm sheen where the water is stirred.
   col += champagne * length(f) * 0.08;
 
   // The dissolving front: a glowing seam. The wordmark's breaks into sparks;
@@ -339,8 +331,6 @@ export class LiquidStage {
 
   private mouse = { x: 0.5, y: 0.5 }
   private velocity = { x: 0, y: 0 }
-  private hover = 0
-  private hovering = false
   private lastMove = 0
   private canvas: HTMLCanvasElement
   private reduced: boolean
@@ -500,11 +490,10 @@ export class LiquidStage {
     }
     this.lastMove = now
     this.mouse = { x: nx, y: ny }
-    this.hovering = true
   }
 
   leave() {
-    this.hovering = false
+    this.lastMove = 0
   }
 
   get transitioning() {
@@ -517,7 +506,6 @@ export class LiquidStage {
     this.time += dt
     if (this.progress < 1) this.progress = Math.min(1, this.progress + dt / this.duration)
     this.pour = this.radial && this.progress < 1 && !this.reduced ? 1 : Math.max(0, this.pour - dt * 1.2)
-    this.hover += ((this.hovering && !this.reduced ? 1 : 0) - this.hover) * Math.min(1, dt * 4)
 
     // Flowmap step.
     const [read, write] = this.flowTargets
@@ -576,8 +564,6 @@ export class LiquidStage {
     gl.uniform2f(this.main.u("uRes"), this.canvas.width, this.canvas.height)
     gl.uniform1f(this.main.u("uProgress"), easeInOut(this.progress))
     gl.uniform1f(this.main.u("uTime"), this.time)
-    gl.uniform2f(this.main.u("uMouse"), this.mouse.x, this.mouse.y)
-    gl.uniform1f(this.main.u("uHover"), this.hover)
     gl.uniform1f(this.main.u("uLoadedA"), a ? 1 : 0)
     gl.uniform1f(this.main.u("uLoadedB"), b ? 1 : 0)
     gl.uniform1f(this.main.u("uMode"), this.radial ? 1 : 0)
@@ -614,8 +600,8 @@ export class LiquidStage {
  */
 function shrink(source: TexImageSource, aspect: number) {
   const c = document.createElement("canvas")
-  c.width = 48
-  c.height = Math.max(1, Math.round(48 / aspect))
+  c.width = 53
+  c.height = Math.max(1, Math.round(53 / aspect))
   const ctx = c.getContext("2d")!
   ctx.filter = "blur(1px)"
   ctx.drawImage(source as CanvasImageSource, 0, 0, c.width, c.height)
