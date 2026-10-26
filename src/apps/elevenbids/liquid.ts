@@ -30,7 +30,8 @@ export type Slide = {
   fallback: () => HTMLCanvasElement
 }
 
-type Tex = { tex: WebGLTexture; aspect: number }
+/** `back` is a tiny copy of a photo, stretched over the stage as its blurred backdrop. */
+type Tex = { tex: WebGLTexture; aspect: number; back?: WebGLTexture }
 
 const VERT = /* glsl */ `
 attribute vec2 aPos;
@@ -98,6 +99,11 @@ varying vec2 vUv;
 uniform sampler2D uA;
 uniform sampler2D uB;
 uniform sampler2D uFlow;
+uniform sampler2D uBackA;
+uniform sampler2D uBackB;
+// x: image aspect, y: 1 when the slide has a backdrop (photos do, the wordmark doesn't).
+uniform vec2 uBackFitA;
+uniform vec2 uBackFitB;
 uniform vec4 uRectA;
 uniform vec4 uRectB;
 uniform vec2 uFitA;
@@ -144,6 +150,29 @@ float rectMask(vec4 rect, vec2 uv) {
 }
 
 vec3 champagne = vec3(0.86, 0.72, 0.47);
+
+// A photo spread over the whole stage, cover-fitted, softly blurred, dimmed
+// and a little desaturated, so the piece sits in its own light.
+vec3 backdrop(sampler2D tex, float ia, vec2 uv) {
+  float ra = uRes.x / uRes.y;
+  vec2 scale = ra > ia ? vec2(1.0, ia / ra) : vec2(ra / ia, 1.0);
+  // Zoomed in a touch, so the blur never reaches the image's own edges.
+  vec2 st = (uv - 0.5) * scale * 0.88 + 0.5;
+  vec3 c = texture2D(tex, st).rgb;
+  for (int i = 0; i < 8; i++) {
+    float an = float(i) * 0.785398;
+    c += texture2D(tex, st + vec2(cos(an), sin(an)) * 0.03).rgb;
+  }
+  c /= 9.0;
+  float l = dot(c, vec3(0.299, 0.587, 0.114));
+  return mix(vec3(l), c, 0.7) * 0.3;
+}
+
+// 1 at a slide's frame, falling off outside it: a soft shadow under the photo.
+float shadowOf(vec4 rect, vec2 uv) {
+  vec2 q = abs((uv - rect.xy - rect.zw * 0.5) * uRes) - rect.zw * uRes * 0.5;
+  return exp(-length(max(q, 0.0)) / (0.06 * uRes.y));
+}
 
 void main() {
   vec2 uv = vUv;
@@ -227,7 +256,13 @@ void main() {
   vec3 bg = vec3(0.027, 0.025, 0.024) + champagne * pow(smoke, 3.0) * 0.07;
   bg += champagne * 0.05 * exp(-length((uv - vec2(0.5, 0.45)) * aspect) * 2.2);
 
-  vec3 col = bg;
+  // Behind a photo, its own blurred light; it arrives with the pour.
+  vec2 bu = uv - f * 0.05 + swirl * 0.03;
+  vec3 backA = bg + (uBackFitA.y > 0.5 ? backdrop(uBackA, uBackFitA.x, bu) : vec3(0.0));
+  vec3 backB = bg + (uBackFitB.y > 0.5 ? backdrop(uBackB, uBackFitB.x, bu) : vec3(0.0));
+  backA *= 1.0 - 0.55 * shadowOf(uRectA, uv) * uBackFitA.y;
+  backB *= 1.0 - 0.55 * shadowOf(uRectB, uv) * uBackFitB.y;
+  vec3 col = mix(backA, backB, mixv * uLoadedB);
   col = mix(col, a.rgb, a.a * (1.0 - mixv));
   col = mix(col, b.rgb, b.a * mixv);
 
@@ -394,12 +429,14 @@ export class LiquidStage {
       }).then((source) => {
         const w = "naturalWidth" in source ? source.naturalWidth : (source as HTMLCanvasElement).width
         const h = "naturalHeight" in source ? source.naturalHeight : (source as HTMLCanvasElement).height
+        const backed = slide.fit === "cover"
         try {
-          return { tex: this.upload(source), aspect: w / h }
+          return { tex: this.upload(source), aspect: w / h, back: backed ? this.upload(shrink(source, w / h)) : undefined }
         } catch {
           // A tainted image (no CORS headers) can't be uploaded.
           const card = slide.fallback()
-          return { tex: this.upload(card), aspect: card.width / card.height }
+          const aspect = card.width / card.height
+          return { tex: this.upload(card), aspect, back: backed ? this.upload(shrink(card, aspect)) : undefined }
         }
       })
       this.cache.set(key, pending)
@@ -524,6 +561,10 @@ export class LiquidStage {
     bind(0, "uA", a?.tex ?? this.blank)
     bind(1, "uB", b?.tex ?? this.blank)
     bind(2, "uFlow", { tex: write.tex, aspect: 1 })
+    bind(3, "uBackA", { tex: a?.tex.back ?? this.blank.tex, aspect: 1 })
+    bind(4, "uBackB", { tex: b?.tex.back ?? this.blank.tex, aspect: 1 })
+    gl.uniform2f(this.main.u("uBackFitA"), a?.tex.aspect ?? 1, a?.tex.back ? 1 : 0)
+    gl.uniform2f(this.main.u("uBackFitB"), b?.tex.aspect ?? 1, b?.tex.back ? 1 : 0)
     const rect = (name: string, r: Slide["rect"] | undefined) => {
       const v = r ?? { x: 0, y: 0, w: 1, h: 1 }
       gl.uniform4f(this.main.u(name), v.x / this.width, 1 - (v.y + v.h) / this.height, v.w / this.width, v.h / this.height)
@@ -550,7 +591,12 @@ export class LiquidStage {
    */
   dispose() {
     const gl = this.gl
-    void Promise.all(this.cache.values()).then((texs) => texs.forEach((t) => gl.deleteTexture(t.tex)))
+    void Promise.all(this.cache.values()).then((texs) =>
+      texs.forEach((t) => {
+        gl.deleteTexture(t.tex)
+        if (t.back) gl.deleteTexture(t.back)
+      })
+    )
     this.cache.clear()
     gl.deleteTexture(this.blank.tex)
     for (const t of this.flowTargets) {
@@ -560,6 +606,20 @@ export class LiquidStage {
     gl.deleteProgram(this.main.p)
     gl.deleteProgram(this.flow.p)
   }
+}
+
+/**
+ * A photo shrunk to a few dozen pixels: stretched back over the stage with
+ * linear filtering, it's already most of the way to a deep blur.
+ */
+function shrink(source: TexImageSource, aspect: number) {
+  const c = document.createElement("canvas")
+  c.width = 48
+  c.height = Math.max(1, Math.round(48 / aspect))
+  const ctx = c.getContext("2d")!
+  ctx.filter = "blur(1px)"
+  ctx.drawImage(source as CanvasImageSource, 0, 0, c.width, c.height)
+  return c
 }
 
 function blankCanvas() {
