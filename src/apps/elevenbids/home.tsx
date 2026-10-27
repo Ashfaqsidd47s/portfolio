@@ -6,6 +6,7 @@ import { Footer } from "./footer"
 import { Catalogue, LotImage } from "./lots"
 import { useShell } from "./shell"
 import { bidderCity, bidderLabel, useAuction } from "./store"
+import { Showcase } from "./showcase"
 import { Stage } from "./stage"
 import { Eyebrow, Reveal } from "./ui"
 
@@ -15,6 +16,7 @@ export function Home() {
       <Stage />
       <RoomTicker />
       <Collection />
+      <Showcase />
       <section aria-labelledby="eb-sale" data-eb-tone="light" className="bg-eb-paper px-5 py-24 text-eb-ink @3xl:px-12 @3xl:py-32">
         <div className="mx-auto max-w-[1400px]">
           <Reveal className="mb-12 flex flex-col gap-4 @3xl:mb-16 @3xl:flex-row @3xl:items-end @3xl:justify-between">
