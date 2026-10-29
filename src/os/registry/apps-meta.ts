@@ -142,6 +142,14 @@ export const appsMeta: AppMeta[] = [
     window: { width: 1100, height: 720, minWidth: 420, minHeight: 420 },
   },
   {
+    id: "doon-diorama",
+    name: "Doon Diorama",
+    description: "Dehradun as an isometric pixel-art world: walk from the ISBT down Turner Road to Clement Town's lake and the Great Stupa, through winter sunsets, fog and rain.",
+    kind: "side-project",
+    column: "right",
+    window: { width: 1120, height: 740, minWidth: 420, minHeight: 420 },
+  },
+  {
     id: "about",
     name: "About me",
     description: "Who I am, what I work on, and how to reach me.",
