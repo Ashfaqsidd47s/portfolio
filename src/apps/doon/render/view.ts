@@ -5,21 +5,23 @@ import { BOUNDS, LAKE, MONASTERY, type Vec2 } from "../geo"
 import { Builder } from "../kit/builder"
 import type { Signs } from "../kit/signs"
 import { CHUNK, chunkKey, type Piece, type Plan } from "../world/plan"
-import { Ducks, Fireflies, Fountain, Splashes } from "./fx"
+import { Ducks, Fireflies, Fountain, Motes, Petals, Splashes } from "./fx"
 import { Ground } from "./ground"
 import { makeMaterials, U, type Materials } from "./materials"
 import { Post } from "./post"
 import { makeWater } from "./water"
 
 /**
- * Renderer, camera and the streamed town. The camera is orthographic at a
- * fixed isometric pitch and turns in quarter steps. Each frame the scene is
+ * Renderer, camera and the streamed town. The camera is orthographic and
+ * orbits the player like a third-person camera: drag to turn it round and
+ * tilt it between a low view and a near top-down one. Each frame the scene is
  * rendered small into a target, with the camera snapped to that target's
  * pixel grid, and the post pass scales it up.
  */
 
-const PITCH = (35 * Math.PI) / 180
 const DIST = 420
+const PITCH_MIN = (22 * Math.PI) / 180
+const PITCH_MAX = (68 * Math.PI) / 180
 
 type Chunk = { group: THREE.Group; meshes: THREE.Mesh[] }
 
@@ -46,6 +48,8 @@ export class View {
   readonly ducks: Ducks
   private splashes: Splashes
   private fireflies: Fireflies
+  private motes = new Motes()
+  private petals = new Petals()
   private cssW = 1
   private cssH = 1
   private dpr = 1
@@ -56,9 +60,11 @@ export class View {
   /** World metres shown top to bottom. */
   zoom = 30
   private zoomNow = 30
-  /** Camera direction (from target), in quarter turns; animated. */
-  private turn = 1.5
-  private turnNow = 1.5
+  /** Where the camera sits round the focus (radians; 0 = east, π/2 = south) and how high, with eased copies. */
+  private yaw = (3 * Math.PI) / 4
+  private yawNow = (3 * Math.PI) / 4
+  private pitch = (35 * Math.PI) / 180
+  private pitchNow = (35 * Math.PI) / 180
   readonly focus = new THREE.Vector3()
   private time = 0
   /** 0–1: fades the picture to black (fast travel). */
@@ -95,7 +101,7 @@ export class View {
     this.ducks = new Ducks(plan.water[0] ?? [], fountainAt, this.mats.actor)
     this.splashes = new Splashes(plan.water)
     this.fireflies = new Fireflies([LAKE.centre, LAKE.centre, MONASTERY.centre])
-    this.scene.add(this.fountain.points, this.ducks.group, this.splashes.points, this.fireflies.points)
+    this.scene.add(this.fountain.points, this.ducks.group, this.splashes.points, this.fireflies.points, this.motes.points, this.petals.points)
   }
 
   private makeTarget(w: number, h: number) {
@@ -127,15 +133,21 @@ export class View {
     this.rt = this.makeTarget(this.rtW, this.rtH)
   }
 
-  /** Turn the camera a quarter (+1 clockwise, −1 anticlockwise). */
-  rotate(dir: number) {
-    this.turn += dir
+  /** Orbit by a drag: `dx` turns round the focus, `dy` tilts (radians). */
+  orbit(dx: number, dy: number) {
+    this.yaw += dx
+    this.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, this.pitch + dy))
   }
 
   /** The camera's horizontal heading as a unit vector from the camera toward the focus. */
   heading(): Vec2 {
-    const a = this.turnNow * (Math.PI / 2)
-    return [-Math.cos(a), -Math.sin(a)]
+    return [-Math.cos(this.yawNow), -Math.sin(this.yawNow)]
+  }
+
+  /** Compass bearing the camera looks along (radians clockwise from north), for the minimap. */
+  get bearing() {
+    const [x, z] = this.heading()
+    return Math.atan2(x, -z)
   }
 
   /** World direction for screen-up and screen-right on the ground. */
@@ -147,8 +159,9 @@ export class View {
   update(dt: number, env: EnvState, playerHead: THREE.Vector3) {
     this.time += dt
     this.zoomNow += (this.zoom - this.zoomNow) * Math.min(1, dt * 8)
-    this.turnNow += (this.turn - this.turnNow) * Math.min(1, dt * 7)
-    if (Math.abs(this.turn - this.turnNow) < 0.001) this.turnNow = this.turn
+    const ease = Math.min(1, dt * 16)
+    this.yawNow += (this.yaw - this.yawNow) * ease
+    this.pitchNow += (this.pitch - this.pitchNow) * ease
 
     this.placeCamera()
     this.stream()
@@ -180,10 +193,15 @@ export class View {
     this.fountain.update(dt, env.night, this.time)
     this.splashes.update(dt, env.rain, [this.focus.x, this.focus.z], this.zoomNow * 1.4)
     this.fireflies.update(this.time, env.night * (1 - env.rain) * (1 - env.mist * 0.6))
+    const dry = (1 - env.rain) * (1 - env.mist * 0.5)
+    const dusk = Math.max(0.35, 1 - Math.abs(env.sun.elevation - 2) / 25)
+    this.motes.update(this.time, this.focus, this.zoomNow * 1.6, dry * dusk)
+    this.petals.update(this.time, this.focus, this.zoomNow * 1.6, dry * 0.5, env.wind)
   }
 
   private placeCamera() {
-    const a = this.turnNow * (Math.PI / 2)
+    const a = this.yawNow
+    const pitch = this.pitchNow
     const H = this.zoomNow
     // `zoom` spans the window's shorter side, so a phone held upright isn't zoomed in.
     const upp = H / (Math.min(this.cssW, this.cssH) * this.dpr / this.pixel)
@@ -199,7 +217,7 @@ export class View {
     cam.updateProjectionMatrix()
 
     const T = this.focus
-    const off = new THREE.Vector3(Math.cos(a) * Math.cos(PITCH), Math.sin(PITCH), Math.sin(a) * Math.cos(PITCH)).multiplyScalar(DIST)
+    const off = new THREE.Vector3(Math.cos(a) * Math.cos(pitch), Math.sin(pitch), Math.sin(a) * Math.cos(pitch)).multiplyScalar(DIST)
     cam.position.copy(T).add(off)
     cam.up.set(0, 1, 0)
     cam.lookAt(T)
@@ -220,14 +238,16 @@ export class View {
 
   /** Builds chunks coming into view and frees ones far behind. */
   private stream() {
-    const reach = Math.max(110, this.zoomNow * 1.7)
+    // A low camera sees further across the ground.
+    const reach = Math.max(110, (this.zoomNow * 1.1) / Math.sin(this.pitchNow) + 20)
     const fx = this.focus.x
     const fz = this.focus.z
     const want: [string, number, number, number][] = []
     for (let cx = Math.floor((fx - reach) / CHUNK); cx <= Math.floor((fx + reach) / CHUNK); cx++) {
       for (let cz = Math.floor((fz - reach) / CHUNK); cz <= Math.floor((fz + reach) / CHUNK); cz++) {
-        if ((cx + 1) * CHUNK < BOUNDS.minX - 40 || cx * CHUNK > BOUNDS.maxX + 40) continue
-        if ((cz + 1) * CHUNK < BOUNDS.minZ - 40 || cz * CHUNK > BOUNDS.maxZ + 40) continue
+        // The sky islets float up to ~130 m beyond the edge.
+        if ((cx + 1) * CHUNK < BOUNDS.minX - 140 || cx * CHUNK > BOUNDS.maxX + 140) continue
+        if ((cz + 1) * CHUNK < BOUNDS.minZ - 140 || cz * CHUNK > BOUNDS.maxZ + 140) continue
         const d = Math.hypot((cx + 0.5) * CHUNK - fx, (cz + 0.5) * CHUNK - fz)
         if (d < reach + CHUNK * 0.7) want.push([chunkKey(cx, cz), cx, cz, d])
       }
@@ -298,7 +318,7 @@ export class View {
 
   private light(env: EnvState, dt: number) {
     const T = this.focus
-    const span = Math.max(48, this.zoomNow * 1.25)
+    const span = Math.max(48, (this.zoomNow * 0.8) / Math.sin(this.pitchNow))
     const sc = this.sun.shadow.camera
     sc.left = -span
     sc.right = span

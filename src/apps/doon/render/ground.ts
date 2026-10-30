@@ -5,8 +5,8 @@ import { CHUNK, type Plan, type Zone } from "../world/plan"
 
 /**
  * The ground of one chunk: 2 m tiles, each a colour picked from the zone
- * it's in (ISBT concrete, monastery paving, cantonment lawn, dry winter
- * grass and bare earth elsewhere), with the lake bed sunk below the bank.
+ * it's in (ISBT concrete, monastery paving, cantonment lawn, meadow with
+ * flowers and bare earth elsewhere), with the lake bed sunk below the bank.
  */
 
 const CELL = 2
@@ -51,21 +51,22 @@ export class Ground {
       case "courtyard":
         return (Math.floor(x / CELL) + Math.floor(z / CELL)) % 2 ? 0xcbc2b0 : 0xbfb6a4
       case "monastery":
-        return h > 0.5 ? 0x6f9e48 : 0x78a650
+        return h > 0.5 ? 0x6cb44c : 0x76bc52
       case "cantt":
-        return n > 0.72 ? 0x9a8a62 : h > 0.5 ? 0x74a04a : 0x6c9644
+        return n > 0.72 ? 0xa89668 : h > 0.5 ? 0x6cb24a : 0x64a844
       case "parade":
         return h > 0.5 ? 0xb59a6a : 0xab9062
       case "lawn":
-        return h > 0.5 ? 0x7cab4e : 0x86b456
+        return h > 0.5 ? 0x7cc256 : 0x86c95c
       case "path":
         return h > 0.5 ? 0xc4b294 : 0xbaa88a
       default: {
         const near = this.plan.nearestRoad([x, z]).dist
-        if (near < 2.2) return h > 0.5 ? 0x9a8466 : 0x8f7a5c
-        if (n > 0.63) return h > 0.5 ? 0xa08a62 : 0x968058
+        if (near < 2.2) return h > 0.5 ? 0xb09468 : 0xa4895e
+        if (n > 0.66) return h > 0.5 ? 0xb39a68 : 0xa88e5e
+        // Meadow: lush greens.
         const g = fbm2(x * 0.08 + 40, z * 0.08)
-        return g > 0.62 ? 0x95a055 : g > 0.42 ? (h > 0.5 ? 0x7d9448 : 0x84994c) : h > 0.5 ? 0x6e8a40 : 0x749044
+        return g > 0.62 ? 0x8cc95e : g > 0.42 ? (h > 0.5 ? 0x74b84e : 0x7cbf54) : h > 0.5 ? 0x62a646 : 0x6aad4a
       }
     }
   }

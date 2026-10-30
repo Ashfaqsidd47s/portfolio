@@ -3,6 +3,7 @@ import { CANTT_GATE, ISBT, LAKE, MONASTERY, PLACES, START, SURVEYED, inside } fr
 import { Builder } from "../kit/builder"
 import { NoSigns } from "../kit/signs"
 import { createRng } from "@/os/kernel/rng"
+import { WARPS } from "./fantasy"
 import { buildPlan } from "./plan"
 
 const plan = buildPlan(new NoSigns())
@@ -34,14 +35,18 @@ describe("the plan", () => {
     expect(seat).toBeDefined()
     expect(Math.hypot(seat.p[0] - LAKE.centre[0], seat.p[1] - LAKE.centre[1])).toBeLessThan(LAKE.rx + 10)
     for (const id of ["cakehouse", "rajkumar", "stupa", "fountain"]) expect(plan.marks.has(id)).toBe(true)
+    for (const id of WARPS) expect(plan.marks.has(`warp-${id}`), id).toBe(true)
   })
 
   it("leaves every shop counter and place reachable", () => {
     for (const s of plan.spots) {
-      const ok = [0, 1, 2, 3, 4, 5, 6, 7].some((i) => {
-        const a = (i / 8) * Math.PI * 2
-        return plan.collision.free(s.at[0] + Math.cos(a) * 0.8, s.at[1] + Math.sin(a) * 0.8, 0.35)
-      })
+      // Somewhere within the spot's reach you can stand.
+      const ok = [0.8, s.radius * 0.8].some((r) =>
+        [0, 1, 2, 3, 4, 5, 6, 7].some((i) => {
+          const a = (i / 8) * Math.PI * 2
+          return plan.collision.free(s.at[0] + Math.cos(a) * r, s.at[1] + Math.sin(a) * r, 0.35)
+        })
+      )
       expect(ok, s.id).toBe(true)
     }
     for (const p of PLACES.filter((p) => p.travel)) expect(p.at).toBeDefined()

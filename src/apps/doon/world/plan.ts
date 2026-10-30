@@ -21,9 +21,10 @@ import {
 } from "../geo"
 import type { Signs, SignStyle } from "../kit/signs"
 import { box as makeBox, boxYaw, circle, Collision, type Box } from "./collide"
+import { islandEdge, skyIslands, warpStones } from "./fantasy"
 import { landmarks } from "./landmarks"
 import { roadPieces } from "./roads"
-import { car, cow, house, range, scooter, streetLamp, tree, type Kit, type Rng, type TreeKind } from "./props"
+import { car, cow, flowers, house, range, scooter, streetLamp, tree, type Kit, type Rng, type TreeKind } from "./props"
 
 /**
  * The whole town as a list of pieces — each one a position and a function
@@ -222,12 +223,14 @@ export function buildPlan(signs: Signs, seed = 2026): Plan {
   )
 
   landmarks(plan, r)
+  warpStones(plan, r)
   lanes(plan, r)
   roadPieces(plan)
   for (const road of plan.roads) frontage(plan, road, r)
   backfill(plan, r)
   roadside(plan, r)
-  edges(plan)
+  islandEdge(plan, r)
+  skyIslands(plan, r)
 
   plan.routes.push(
     { road: "saharanpur", kind: "bus", count: 3 },
@@ -330,7 +333,7 @@ function parkedTwoWheeler(plan: Plan, at: Vec2, d: Vec2, r: Rng) {
 /** Houses, orchards and fields behind the frontage. */
 function backfill(plan: Plan, r: Rng) {
   const step = 22
-  const kinds: TreeKind[] = ["mango", "mango", "lychee", "sal", "eucalyptus", "pine"]
+  const kinds: TreeKind[] = ["mango", "mango", "lychee", "sal", "eucalyptus", "pine", "kachnar", "jacaranda"]
   for (let x = BOUNDS.minX + 12; x < BOUNDS.maxX - 12; x += step) {
     for (let z = BOUNDS.minZ + 12; z < BOUNDS.maxZ - 12; z += step) {
       const p: Vec2 = [x + range(r, -6, 6), z + range(r, -6, 6)]
@@ -360,6 +363,10 @@ function backfill(plan: Plan, r: Rng) {
           if (!plan.excluded(t)) treeAt(plan, t, kind)
         }
         if (r.chance(0.08)) cowAt(plan, add(p, [range(r, -5, 5), range(r, -5, 5)]), r)
+        if (r.chance(0.35)) {
+          const f = add(p, [range(r, -7, 7), range(r, -7, 7)])
+          if (!plan.taken.hits(makeBox(f[0], f[1], 3, 3))) plan.add(f[0], f[1], (k) => place(k, f[0], f[1], 0, () => flowers(k, 12, 2.2)))
+        }
       }
     }
   }
@@ -418,37 +425,6 @@ function roadside(plan: Plan, r: Rng) {
       if (plan.taken.hits(b)) continue
       plan.solid(b)
       plan.add(at[0], at[1], (k) => place(k, at[0], at[1], yaw, () => car(k)))
-    }
-  }
-}
-
-/** The diorama's cut edge: earth in layers, all the way round. */
-function edges(plan: Plan) {
-  const sides: [Vec2, Vec2][] = [
-    [[BOUNDS.minX, BOUNDS.minZ], [BOUNDS.maxX, BOUNDS.minZ]],
-    [[BOUNDS.maxX, BOUNDS.minZ], [BOUNDS.maxX, BOUNDS.maxZ]],
-    [[BOUNDS.maxX, BOUNDS.maxZ], [BOUNDS.minX, BOUNDS.maxZ]],
-    [[BOUNDS.minX, BOUNDS.maxZ], [BOUNDS.minX, BOUNDS.minZ]],
-  ]
-  for (const [a, b] of sides) {
-    const d = norm([b[0] - a[0], b[1] - a[1]])
-    const L = Math.hypot(b[0] - a[0], b[1] - a[1])
-    // Outward is to the left of travel (the loop runs clockwise seen from above).
-    const yaw = yawOf(d)
-    for (let s = 0; s < L; s += 32) {
-      const len = Math.min(32, L - s)
-      const m = add(a, scale(d, s + len / 2))
-      plan.add(m[0], m[1], (k) =>
-        place(k, m[0], m[1], yaw, () => {
-          const layers: [number, number, number][] = [
-            [-0.6, 0.6, 0x5e8a3a],
-            [-3, 2.4, 0x7a5a3a],
-            [-6.5, 3.5, 0x5e4430],
-            [-12, 5.5, 0x463428],
-          ]
-          for (const [y, h, c] of layers) k.b.box(0, y, -0.3, len, h, 0.6, c)
-        })
-      )
     }
   }
 }

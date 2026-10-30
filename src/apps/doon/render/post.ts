@@ -76,6 +76,29 @@ void main() {
     col = mix(uSkyBottom, uSkyTop, smoothstep(0.0, 1.0, vUv.y));
     float star = step(0.9965, h21(floor(cell))) * uNight * (0.6 + 0.4 * sin(uTime * 2.0 + h21(cell) * 40.0));
     col += vec3(star);
+
+    // The sea of cloud the island floats on: cast this pixel's ray down to a
+    // layer 70 m below the ground, so the clouds sit still as the camera turns.
+    vec2 ndc = (cell / uRes) * 2.0 - 1.0;
+    vec4 a = uInvViewProj * vec4(ndc, -1.0, 1.0);
+    vec4 b = uInvViewProj * vec4(ndc, 1.0, 1.0);
+    a /= a.w;
+    b /= b.w;
+    vec3 dir = b.xyz - a.xyz;
+    if (dir.y < -0.001) {
+      float t = (-70.0 - a.y) / dir.y;
+      vec2 p = a.xz + dir.xz * t;
+      vec2 q = p * 0.02 + vec2(uTime * 0.012, uTime * 0.005);
+      float n = fbm(q) * 0.7 + fbm(q * 2.7 + 3.1) * 0.3;
+      // Deep sky shows between the clouds.
+      vec3 deep = mix(uSkyTop, uSkyBottom, 0.25) * 0.85;
+      vec3 lit = mix(vec3(1.0, 0.97, 0.94), uSkyBottom * 1.2, 0.25);
+      vec3 shade = mix(uSkyTop, vec3(0.62, 0.58, 0.85), 0.45);
+      // Three flat tones, like painted anime cloud.
+      vec3 cloud = n > 0.6 ? lit : n > 0.53 ? mix(lit, shade, 0.5) : shade;
+      cloud *= 1.0 - uNight * 0.7;
+      col = mix(deep * (1.0 - uNight * 0.5), cloud, step(0.47, n));
+    }
   } else {
     float z = mix(uNear, uFar, d);
     // Outlines: darken where a neighbour is well behind this pixel.
@@ -85,7 +108,7 @@ void main() {
       float zn = mix(uNear, uFar, depthAt(cell + o[i]));
       edge = max(edge, step(1.1, zn - z));
     }
-    col *= 1.0 - edge * 0.42;
+    col = mix(col, col * vec3(0.42, 0.36, 0.62), edge * 0.85);
 
     // Back to world space for the weather.
     vec4 ndc = vec4((cell / uRes) * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
@@ -115,7 +138,7 @@ void main() {
   col = 1.0 - exp(-col * 1.45);
   col = toSrgb(col);
   float l = dot(col, vec3(0.299, 0.587, 0.114));
-  col = mix(vec3(l), col, uSat);
+  col = mix(vec3(l), col, uSat * 1.1);
   col = (col - 0.5) * 1.04 + 0.5;
 
   // Rain: one-pixel streaks slanted by the wind, in two depths.
