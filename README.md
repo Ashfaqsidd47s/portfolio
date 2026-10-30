@@ -102,6 +102,11 @@ src/
 │  │                          #   (any-axis gravity, + tests), world.ts (live blocks, strum
 │  │                          #   timeline), game.ts, audio.ts (synth biwa), score.ts (chase music),
 │  │                          #   render/ (kit, shaders, drop: the opening fall)
+│  ├─ doon/                   # Doon Diorama: Dehradun, isometric pixel art (three.js):
+│  │                          #   geo.ts (surveyed points, roads, places), env.ts (sun + weather),
+│  │                          #   world/ (plan, landmarks, roads, props, collision, + tests),
+│  │                          #   render/ (view, pixel post pass, materials, ground, water, fx),
+│  │                          #   actors/ (characters, traffic), story.ts, game.ts, audio.ts
 │  ├─ about/
 │  └─ project-info/           # stand-in for projects whose demo isn't built yet
 ├─ data/profile.ts            # single source of truth for all content
@@ -325,6 +330,55 @@ src/
 - **Controls**: WASD / mouse (pointer lock, or drag where it's refused),
   Shift, Space, F, and B / N / M for the biwa, music and all sound. On touch: a floating joystick on the left (push far to
   run), drag on the right to look, tap to jump. Esc or losing focus pauses.
+
+### Doon Diorama (`/apps/doon-diorama`)
+
+- **One corner of Dehradun, walkable**: from the ISBT at Majra, past Shimla
+  Bypass Chowk, down Turner Road to Clement Town Cantonment, its lake, and
+  Mindrolling Monastery's Great Stupa. Isometric, pixel art, in three.js.
+- **The map is in metres** (`geo.ts`). It's anchored on published
+  coordinates: the ISBT (30.28782, 77.99803), Raj Kumar Sweet Shop at 1
+  Turner Road (30.28633, 77.99577) and Clement Town. The roads between them
+  follow the real bearings and lengths (Saharanpur Road runs 29° off north
+  past the ISBT; ISBT to the cantonment is about 2 km). Cake House is at
+  81/2 Turner Road opposite Velmed; the lake is on the right inside the gate.
+  Other positions (the lake's exact shape, the monastery's layout, where
+  the side lanes go) are approximations, and every building between the
+  landmarks is generated. Every point is one line in `geo.ts`, so correcting
+  the map means moving a number; the world rebuilds from it.
+- **Streamed in 64 m chunks** (`world/plan.ts`): the whole town is a seeded
+  list of pieces (≈15,000) with collision known up front. Each chunk's
+  pieces are merged into one mesh as you approach and freed behind you.
+  Houses are Doon houses: plastered boxes, sunshades over the windows,
+  balconies, black Sintex tanks, stair towers, washing lines, rebar left
+  for the next floor, bougainvillea over compound walls, shop boards in
+  English and Hindi.
+- **The pixel look** (`render/`): the scene is rendered small, a whole
+  number of screen pixels to each scene pixel. The camera is snapped to
+  that grid and the post pass shifts by the sub-pixel remainder, so it moves
+  smoothly with no shimmer. Toon shading in bands, outlines where depth
+  jumps, halos round lamps, an ordered dither. Anything between you and the
+  camera dissolves in a dither. The world ends in a cut edge of layered
+  earth under the sky, like a diorama.
+- **Day, night and weather** (`env.ts`): the sun follows real solar geometry
+  for 30.28° N on December 21st (it sets about 5:20 pm), so the red winter
+  evening comes at the hour it does in Dehradun. Clear, cloudy, rain (pixel
+  streaks, splashes, ripples, wet ground, lightning and thunder) and winter
+  fog blend into each other. In Auto they change every few game hours, or
+  you can set them from the time & weather panel. Street lights, windows,
+  the lake fountain and the stupa's strings of bulbs come on at dusk.
+- **Two people**: you, just off the bus, and your friend waiting on a bench
+  by the lake (`story.ts`; her name is a constant). She wants Cake House's
+  patties; then the two of you walk to the Great Stupa. Lines change with
+  the hour and the weather. Buses, Vikrams, cars and scooters keep left and
+  stop for you.
+- **Sound** is synthesised: rain, wind, birds by day, crickets at night,
+  thunder, horns near the big roads, a singing bowl near the monastery.
+- **Controls**: WASD / arrows, Shift to run, E to talk or buy, Z / X to turn
+  the camera, wheel to zoom, M for the map and fast travel, T for time and
+  weather. On touch: drag the left half to walk, tap Use.
+- **Multiplayer** (other people roaming, friends) needs a WebSocket backend;
+  this is the frontend only.
 
 ### The journey (`/journey`)
 
