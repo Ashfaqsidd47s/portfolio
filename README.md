@@ -104,9 +104,10 @@ src/
 │  │                          #   render/ (kit, shaders, drop: the opening fall)
 │  ├─ doon/                   # Doon Diorama: Dehradun, isometric pixel art (three.js):
 │  │                          #   geo.ts (surveyed points, roads, places), env.ts (sun + weather),
-│  │                          #   world/ (plan, landmarks, roads, props, collision, + tests),
+│  │                          #   world/ (plan, landmarks, roads, props, fantasy, collision, + tests),
 │  │                          #   render/ (view, pixel post pass, materials, ground, water, fx),
-│  │                          #   actors/ (characters, traffic), story.ts, game.ts, audio.ts
+│  │                          #   actors/ (characters, traffic, markers), story.ts, game.ts,
+│  │                          #   map.ts (parchment map + compass minimap), audio.ts
 │  ├─ about/
 │  └─ project-info/           # stand-in for projects whose demo isn't built yet
 ├─ data/profile.ts            # single source of truth for all content
@@ -335,7 +336,12 @@ src/
 
 - **One corner of Dehradun, walkable**: from the ISBT at Majra, past Shimla
   Bypass Chowk, down Turner Road to Clement Town Cantonment, its lake, and
-  Mindrolling Monastery's Great Stupa. Isometric, pixel art, in three.js.
+  Mindrolling Monastery's Great Stupa. Pixel art in three.js, with an
+  isekai-anime fantasy layer: the town floats on an island over a sea of
+  cloud (`world/fantasy.ts`: rock tiers, hanging teeth, roots, waterfalls,
+  drifting islets), warp crystals stand at the fast-travel points, magic
+  motes and blossom petals drift by, pink kachnar and purple jacaranda
+  are always in bloom, and a pillar of gold light stands on the quest.
 - **The map is in metres** (`geo.ts`). It's anchored on published
   coordinates: the ISBT (30.28782, 77.99803), Raj Kumar Sweet Shop at 1
   Turner Road (30.28633, 77.99577) and Clement Town. The roads between them
@@ -353,13 +359,17 @@ src/
   balconies, black Sintex tanks, stair towers, washing lines, rebar left
   for the next floor, bougainvillea over compound walls, shop boards in
   English and Hindi.
+- **The camera** orbits you like a third-person camera: drag (mouse, or the
+  right half of a touch screen) to turn it round and tilt it from a low view
+  to nearly top-down. The minimap is a compass that turns with it, showing
+  your friend, the quest star and the warp crystals.
 - **The pixel look** (`render/`): the scene is rendered small, a whole
   number of screen pixels to each scene pixel. The camera is snapped to
   that grid and the post pass shifts by the sub-pixel remainder, so it moves
-  smoothly with no shimmer. Toon shading in bands, outlines where depth
-  jumps, halos round lamps, an ordered dither. Anything between you and the
-  camera dissolves in a dither. The world ends in a cut edge of layered
-  earth under the sky, like a diorama.
+  smoothly with no shimmer. The cloud sea is ray-cast in the post pass, so
+  it stays put as the camera turns. Toon shading in bands, violet ink outlines where
+  depth jumps, halos round lamps and crystals, an ordered dither. Anything
+  between you and the camera dissolves in a dither.
 - **Day, night and weather** (`env.ts`): the sun follows real solar geometry
   for 30.28° N on December 21st (it sets about 5:20 pm), so the red winter
   evening comes at the hour it does in Dehradun. Clear, cloudy, rain (pixel
@@ -367,16 +377,20 @@ src/
   fog blend into each other. In Auto they change every few game hours, or
   you can set them from the time & weather panel. Street lights, windows,
   the lake fountain and the stupa's strings of bulbs come on at dusk.
-- **Two people**: you, just off the bus, and your friend waiting on a bench
-  by the lake (`story.ts`; her name is a constant). She wants Cake House's
+- **Two people**, drawn as chibi anime adventurers (`actors/character.ts`):
+  you in a traveller's cloak with a wooden sword, just off the bus, and your
+  friend in a long coat with a red bow, waiting on a bench by the lake
+  (`story.ts`; her name is a constant). Cape, scarf and long hair stream
+  out behind when you run. She wants Cake House's
   patties; then the two of you walk to the Great Stupa. Lines change with
   the hour and the weather. Buses, Vikrams, cars and scooters keep left and
   stop for you.
 - **Sound** is synthesised: rain, wind, birds by day, crickets at night,
   thunder, horns near the big roads, a singing bowl near the monastery.
-- **Controls**: WASD / arrows, Shift to run, E to talk or buy, Z / X to turn
-  the camera, wheel to zoom, M for the map and fast travel, T for time and
-  weather. On touch: drag the left half to walk, tap Use.
+- **Controls**: WASD / arrows, Shift to run, drag to look around, E to talk,
+  buy or warp, wheel to zoom, M for the map and fast travel, T for time and
+  weather. On touch: drag the left half to walk, the right half to look,
+  tap Use.
 - **Multiplayer** (other people roaming, friends) needs a WebSocket backend;
   this is the frontend only.
 

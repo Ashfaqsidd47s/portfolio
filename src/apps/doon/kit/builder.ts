@@ -186,6 +186,17 @@ export class Builder {
     this.triL([[x0, y, z0], [x0, y, z1], [r0, yr, z]], hex)
   }
 
+  /** A pyramid hanging point-down: base at y, tip `h` below. */
+  spike(x: number, y: number, z: number, w: number, h: number, d: number, hex: number) {
+    const x0 = x - w / 2, x1 = x + w / 2
+    const z0 = z - d / 2, z1 = z + d / 2
+    const yt = y - h
+    this.triL([[x0, y, z1], [x, yt, z], [x1, y, z1]], hex)
+    this.triL([[x1, y, z0], [x, yt, z], [x0, y, z0]], hex)
+    this.triL([[x1, y, z1], [x, yt, z], [x1, y, z0]], hex)
+    this.triL([[x0, y, z0], [x, yt, z], [x0, y, z1]], hex)
+  }
+
   /** A cylinder or cone frustum with a lid. */
   cyl(x: number, y: number, z: number, r0: number, r1: number, h: number, hex: number, segs = 8, lid = true) {
     const c = this.colour(hex)

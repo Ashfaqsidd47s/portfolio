@@ -193,3 +193,71 @@ export class Ducks {
     })
   }
 }
+
+/** Magic motes: gold and cyan sparks drifting up round you, brighter at dusk. */
+export class Motes {
+  readonly points: THREE.Points
+  private n = 45
+  private seed: Float32Array
+
+  constructor() {
+    this.points = points(this.n, 2, true)
+    this.seed = new Float32Array(this.n * 4)
+    for (let i = 0; i < this.seed.length; i++) this.seed[i] = Math.random()
+  }
+
+  update(time: number, at: THREE.Vector3, span: number, amount: number) {
+    const pos = this.points.geometry.getAttribute("position") as THREE.BufferAttribute
+    const col = this.points.geometry.getAttribute("color") as THREE.BufferAttribute
+    for (let i = 0; i < this.n; i++) {
+      const [a, b, c, d] = [this.seed[i * 4], this.seed[i * 4 + 1], this.seed[i * 4 + 2], this.seed[i * 4 + 3]]
+      const life = (time * (0.05 + d * 0.06) + a) % 1
+      // Fixed to a grid that wraps round the focus, so they don't follow you.
+      const gx = Math.floor((at.x - (b - 0.5) * span) / span) * span + (b - 0.5) * span + span / 2
+      const gz = Math.floor((at.z - (c - 0.5) * span) / span) * span + (c - 0.5) * span + span / 2
+      pos.setXYZ(i, gx + Math.sin(time * 0.7 + a * 9) * 1.5, 0.3 + life * 7, gz + Math.cos(time * 0.6 + b * 9) * 1.5)
+      const tw = Math.max(0, Math.sin(time * 3 + d * 30)) * Math.sin(life * Math.PI) * amount * 2.4
+      if (i % 3 === 0) col.setXYZ(i, 0.45 * tw, 1.0 * tw, 1.1 * tw)
+      else col.setXYZ(i, 1.2 * tw, 0.95 * tw, 0.45 * tw)
+    }
+    pos.needsUpdate = true
+    col.needsUpdate = true
+  }
+}
+
+/** Blossom petals drifting down on the wind. */
+export class Petals {
+  readonly points: THREE.Points
+  private n = 60
+  private seed: Float32Array
+
+  constructor() {
+    this.points = points(this.n, 2)
+    this.seed = new Float32Array(this.n * 4)
+    for (let i = 0; i < this.seed.length; i++) this.seed[i] = Math.random()
+    const col = this.points.geometry.getAttribute("color") as THREE.BufferAttribute
+    for (let i = 0; i < this.n; i++) {
+      const pink = i % 4 !== 0
+      col.setXYZ(i, pink ? 1.0 : 0.72, pink ? 0.62 : 0.6, pink ? 0.78 : 0.95)
+    }
+    col.needsUpdate = true
+  }
+
+  update(time: number, at: THREE.Vector3, span: number, amount: number, wind: number) {
+    const pos = this.points.geometry.getAttribute("position") as THREE.BufferAttribute
+    const live = Math.floor(this.n * amount)
+    for (let i = 0; i < this.n; i++) {
+      if (i >= live) {
+        pos.setY(i, -50)
+        continue
+      }
+      const [a, b, c, d] = [this.seed[i * 4], this.seed[i * 4 + 1], this.seed[i * 4 + 2], this.seed[i * 4 + 3]]
+      const fall = (time * (0.04 + d * 0.03) + a) % 1
+      const drift = fall * (6 + wind * 18)
+      const gx = Math.floor((at.x - (b - 0.5) * span) / span) * span + (b - 0.5) * span + span / 2
+      const gz = Math.floor((at.z - (c - 0.5) * span) / span) * span + (c - 0.5) * span + span / 2
+      pos.setXYZ(i, gx + drift + Math.sin(time * 2 + a * 20) * 0.6, 14 * (1 - fall), gz + drift * 0.4 + Math.cos(time * 1.7 + b * 20) * 0.6)
+    }
+    pos.needsUpdate = true
+  }
+}

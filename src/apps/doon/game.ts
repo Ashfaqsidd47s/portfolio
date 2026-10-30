@@ -1,12 +1,14 @@
 import * as THREE from "three"
 import { Character, FRIEND, ME } from "./actors/character"
+import { Markers } from "./actors/markers"
 import { Traffic } from "./actors/traffic"
 import { Environment, type EnvEvent, type WeatherKind } from "./env"
 import type { Surroundings } from "./audio"
-import { along, CHOWK, LAKE, PLACES, START, add, nearest, norm, right, roadById, scale, type Vec2 } from "./geo"
+import { LAKE, PLACES, START, add, nearest, norm, right, scale, type Vec2 } from "./geo"
 import type { Signs } from "./kit/signs"
 import { View } from "./render/view"
 import { bought, choose, finale, FRIEND_NAME, newStory, objective, PLAYER_NAME, talk, type Line, type Scene, type StoryState } from "./story"
+import { WARPS } from "./world/fantasy"
 import type { Plan } from "./world/plan"
 
 /**
@@ -28,6 +30,8 @@ export type GameEvent =
   | { type: "thunder"; delay: number; strength: number }
   | { type: "step"; wet: boolean; run: boolean }
   | { type: "achievement"; title: string }
+  /** Stepped up to a warp crystal: open the map to choose where to go. */
+  | { type: "warp" }
 
 export type Hud = {
   /** Interaction available: what pressing E would do. */
@@ -38,6 +42,10 @@ export type Hud = {
   friend: { x: number; y: number; visible: boolean; bubble: string | null }
   player: { x: number; z: number; heading: number }
   place: string
+  /** For the minimap: where she is, where you're headed, which way the camera looks. */
+  friendAt: Vec2
+  target: Vec2 | null
+  bearing: number
 }
 
 const RADIUS = 0.32
@@ -55,11 +63,15 @@ export class Game {
     friend: { x: 0, y: 0, visible: false, bubble: null },
     player: { x: START[0], z: START[1], heading: 0 },
     place: "",
+    friendAt: [0, 0],
+    target: null,
+    bearing: 0,
   }
   private plan: Plan
   private me: Character
   private friend: Character
   private traffic: Traffic
+  private markers: Markers
   private pos: Vec2 = [...START]
   private friendPos: Vec2
   private friendSeat: { p: Vec2; d: Vec2 }
@@ -83,7 +95,8 @@ export class Game {
     this.me = new Character(ME, this.view.mats.actor)
     this.friend = new Character(FRIEND, this.view.mats.actor)
     this.traffic = new Traffic(plan, this.view.mats.world)
-    this.view.scene.add(this.me.root, this.friend.root, this.traffic.group)
+    this.markers = new Markers(WARPS.map((id) => plan.marks.get(`warp-${id}`)?.p ?? START))
+    this.view.scene.add(this.me.root, this.friend.root, this.traffic.group, this.markers.group)
 
     this.friendSeat = plan.marks.get("friend") ?? { p: [270, 330] as Vec2, d: [0, 1] as Vec2 }
     this.friendPos = [...this.friendSeat.p]
@@ -143,8 +156,9 @@ export class Game {
     this.travelling = { to, t: 0, moved: false }
   }
 
-  rotate(dir: number) {
-    this.view.rotate(dir)
+  /** Drag on the view: turn the camera round you and tilt it. */
+  orbit(dx: number, dy: number) {
+    this.view.orbit(dx, dy)
   }
 
   zoomBy(f: number) {
@@ -180,6 +194,13 @@ export class Game {
     this.me.update(dt)
     this.friend.update(dt)
     this.syncActors()
+    const st = this.story
+    const hasNews = st.stage === "arrive" || st.stage === "return" || (st.stage === "errand" && st.patties)
+    this.markers.update(performance.now() / 1000, this.targetPoint(), this.pos, {
+      p: this.friendPos,
+      y: this.friendState === "seated" ? 2.5 : 2.95,
+      show: hasNews && !this.scene,
+    }, this.view.camera)
 
     // The camera trails a touch behind you.
     const f = this.view.focus
@@ -348,6 +369,10 @@ export class Game {
 
   private use(id: string) {
     const env = this.env.state
+    if (id.startsWith("warp:")) {
+      this.emit({ type: "warp" })
+      return
+    }
     switch (id) {
       case "friend": {
         if (this.friendState === "seated") {
@@ -465,22 +490,11 @@ export class Game {
 
   // ── fast travel ───────────────────────────────────────────────────────────
 
+  /** Fast travel lands you beside that place's warp crystal. */
   private travelPoint(id: string): Vec2 | null {
-    const turner = roadById("turner")
-    const at = (p: Vec2) => this.freeNear(p)
-    switch (id) {
-      case "isbt":
-        return at(START)
-      case "chowk":
-        return at(add(along(turner.points, 22).p, scale(right(along(turner.points, 22).d), -6.5)))
-      case "cakehouse":
-        return at(this.plan.marks.get("cakehouse")?.p ?? CHOWK)
-      case "lake":
-        return at(add(this.friendSeat.p, scale(this.friendSeat.d, -4)))
-      case "monastery":
-        return at(this.plan.marks.get("stupa")?.p ?? CHOWK)
-    }
-    return null
+    const warp = this.plan.marks.get(`warp-${id}`)
+    if (!warp) return null
+    return this.freeNear(add(warp.p, [2.6, 2.6]))
   }
 
   private freeNear(p: Vec2): Vec2 | null {
@@ -563,9 +577,13 @@ export class Game {
     h.player.x = this.pos[0]
     h.player.z = this.pos[1]
     h.player.heading = this.me.yaw
+    h.friendAt = this.friendPos
+    h.target = target
+    h.bearing = this.view.bearing
   }
 
   dispose() {
+    this.markers.dispose()
     this.traffic.dispose()
     this.view.dispose()
   }

@@ -6,8 +6,6 @@ import {
   HelpCircle,
   Map as MapIcon,
   Navigation,
-  RotateCcw,
-  RotateCw,
   Sparkles,
   Sun,
   SunMoon,
@@ -35,10 +33,15 @@ const UI = "font-['Pixelify_Sans',ui-sans-serif,sans-serif]"
 const TITLE = "font-['Press_Start_2P',monospace]"
 const MUTE_KEY = "doon-muted"
 
-/** Cream paper with a dark pixel border and a hard drop shadow. */
-const panel = "border-2 border-[#3a2a1a] bg-[#fff8e8]/95 text-[#2a2018] shadow-[4px_4px_0_#3a2a1a]"
+/** A JRPG window: deep indigo glass, a gold double border, a soft drop shadow. */
+const panel =
+  "rounded-md border-2 border-[#e2c275] bg-[#1d1838]/90 text-[#f6ecd6] shadow-[0_0_0_2px_#2a1d10,0_8px_22px_#0009] outline outline-1 -outline-offset-[5px] outline-[#e2c275]/35 backdrop-blur-[2px]"
 const chip =
-  "pointer-events-auto inline-flex size-9 items-center justify-center border-2 border-[#3a2a1a] bg-[#fff8e8] text-[#3a2a1a] shadow-[2px_2px_0_#3a2a1a] transition-transform hover:-translate-y-px active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#fff8e8] disabled:opacity-40"
+  "pointer-events-auto inline-flex size-9 items-center justify-center rounded-full border-2 border-[#e2c275] bg-[#1d1838]/90 text-[#ffe7a8] shadow-[0_0_0_2px_#2a1d10,0_4px_10px_#0008] transition-transform hover:-translate-y-px hover:text-white active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffe7a8] disabled:opacity-40"
+/** A button inside a window. */
+const option =
+  "rounded-sm border border-[#e2c275]/70 bg-[#2c2550] text-[#f6ecd6] hover:bg-[#3a3268] focus-visible:outline-2 focus-visible:outline-[#ffe7a8]"
+const optionOn = "rounded-sm border border-[#e2c275] bg-[#e2c275] text-[#1d1838]"
 
 const WEATHER_ICON: Record<WeatherKind, typeof Sun> = { clear: Sun, cloudy: Cloud, rain: CloudRain, mist: CloudFog }
 const WEATHER_NAME: Record<WeatherKind, string> = { clear: "Clear", cloudy: "Cloudy", rain: "Rain", mist: "Winter fog" }
@@ -57,6 +60,22 @@ const readMuted = () => {
   } catch {
     return false
   }
+}
+
+/** A five-point star, for the quest on the minimap. */
+function star(ctx: CanvasRenderingContext2D, r: number) {
+  ctx.beginPath()
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 - Math.PI / 2
+    const rr = i % 2 ? r * 0.45 : r
+    ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr)
+  }
+  ctx.closePath()
+  ctx.fillStyle = "#ffd36a"
+  ctx.fill()
+  ctx.strokeStyle = "#2a1d10"
+  ctx.lineWidth = 1.2
+  ctx.stroke()
 }
 
 const isTouchDevice = () => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches
@@ -140,6 +159,9 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
           break
         case "step":
           sound?.step(e.wet, e.run)
+          break
+        case "warp":
+          setPanelOpen("map")
           break
         case "achievement":
           sound?.chime()
@@ -278,6 +300,7 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
     return () => window.clearTimeout(id)
   }, [dialogue, typed])
 
+  /** The compass minimap: turns with the camera so up on it is up on screen. */
   const drawMini = () => {
     const c = miniRef.current
     const plan = planRef.current
@@ -285,8 +308,9 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
     if (!c || !plan || !game) return
     if (!miniBase.current) {
       const scale = 0.55
-      const w = Math.ceil((BOUNDS.maxX - BOUNDS.minX) * scale) + 40
-      const h = Math.ceil((BOUNDS.maxZ - BOUNDS.minZ) * scale) + 40
+      const pad = 160
+      const w = Math.ceil((BOUNDS.maxX - BOUNDS.minX) * scale) + pad * 2
+      const h = Math.ceil((BOUNDS.maxZ - BOUNDS.minZ) * scale) + pad * 2
       const base = document.createElement("canvas")
       base.width = w
       base.height = h
@@ -295,33 +319,91 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
       miniBase.current = { canvas: base, frame }
     }
     const { canvas: base, frame } = miniBase.current
+    const h = game.hud
     const ctx = c.getContext("2d")!
     const size = c.width
-    const [px, py] = toMap(frame, [game.hud.player.x, game.hud.player.z])
-    ctx.imageSmoothingEnabled = false
-    ctx.fillStyle = "#e9e2cc"
-    ctx.fillRect(0, 0, size, size)
-    ctx.drawImage(base, Math.round(px - size / 2), Math.round(py - size / 2), size, size, 0, 0, size, size)
-    // You: an arrow the way you're facing.
-    const a = game.hud.player.heading
+    const R = size / 2
+    const [px, py] = toMap(frame, [h.player.x, h.player.z])
+    const rel = (p: [number, number]) => {
+      const [x, y] = toMap(frame, p)
+      return [x - px, y - py] as const
+    }
+    ctx.clearRect(0, 0, size, size)
     ctx.save()
-    ctx.translate(size / 2, size / 2)
-    ctx.rotate(-a + Math.PI)
-    ctx.fillStyle = "#c0392b"
-    ctx.strokeStyle = "#fff8e8"
+    ctx.beginPath()
+    ctx.arc(R, R, R - 4, 0, Math.PI * 2)
+    ctx.clip()
+    ctx.fillStyle = "#cfe3f2"
+    ctx.fillRect(0, 0, size, size)
+    ctx.translate(R, R)
+    ctx.rotate(-h.bearing)
+    ctx.imageSmoothingEnabled = false
+    ctx.drawImage(base, -Math.round(px), -Math.round(py))
+    // Your friend.
+    const [fx, fy] = rel(h.friendAt)
+    ctx.beginPath()
+    ctx.arc(fx, fy, 4, 0, Math.PI * 2)
+    ctx.fillStyle = "#ff7eb6"
+    ctx.fill()
+    ctx.strokeStyle = "#fff"
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+    // The quest: a gold star, pinned to the rim when it's further than the map shows.
+    if (h.target) {
+      let [tx, ty] = rel(h.target)
+      const d = Math.hypot(tx, ty)
+      const rim = R - 14
+      if (d > rim) {
+        tx = (tx / d) * rim
+        ty = (ty / d) * rim
+      }
+      ctx.save()
+      ctx.translate(tx, ty)
+      ctx.rotate(h.bearing)
+      star(ctx, 6)
+      ctx.restore()
+    }
+    ctx.restore()
+
+    // You, in the middle, facing the way you walk.
+    ctx.save()
+    ctx.translate(R, R)
+    ctx.rotate(Math.PI - h.player.heading - h.bearing)
+    ctx.fillStyle = "#ffd36a"
+    ctx.strokeStyle = "#2a1d10"
     ctx.lineWidth = 1.5
     ctx.beginPath()
-    ctx.moveTo(0, -6)
-    ctx.lineTo(4.5, 5)
-    ctx.lineTo(0, 2.5)
-    ctx.lineTo(-4.5, 5)
+    ctx.moveTo(0, -7)
+    ctx.lineTo(5, 6)
+    ctx.lineTo(0, 3)
+    ctx.lineTo(-5, 6)
     ctx.closePath()
     ctx.fill()
     ctx.stroke()
     ctx.restore()
-    ctx.fillStyle = "#3a2a1a"
+
+    // A gold bezel with north marked on it.
+    ctx.beginPath()
+    ctx.arc(R, R, R - 3, 0, Math.PI * 2)
+    ctx.strokeStyle = "#e2c275"
+    ctx.lineWidth = 4
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(R, R, R - 7, 0, Math.PI * 2)
+    ctx.strokeStyle = "#2a1d10aa"
+    ctx.lineWidth = 1
+    ctx.stroke()
+    const nx = R - Math.sin(h.bearing) * (R - 10)
+    const ny = R - Math.cos(h.bearing) * (R - 10)
+    ctx.beginPath()
+    ctx.arc(nx, ny, 7, 0, Math.PI * 2)
+    ctx.fillStyle = "#a3243f"
+    ctx.fill()
+    ctx.fillStyle = "#fff4d6"
     ctx.font = `600 9px "Pixelify Sans", sans-serif`
-    ctx.fillText("N", size - 12, 12)
+    ctx.textAlign = "center"
+    ctx.textBaseline = "middle"
+    ctx.fillText("N", nx, ny + 0.5)
   }
 
   const start = React.useCallback(() => {
@@ -390,9 +472,7 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
         used = ["KeyE", "Space", "Enter"].includes(e.code)
       } else if (e.code === "KeyE" || e.code === "Space" || e.code === "Enter") {
         g.interact()
-      } else if (e.code === "KeyZ" || e.code === "KeyQ") g.rotate(-1)
-      else if (e.code === "KeyX" || e.code === "KeyR") g.rotate(1)
-      else if (e.code === "Equal" || e.code === "NumpadAdd") g.zoomBy(0.85)
+      } else if (e.code === "Equal" || e.code === "NumpadAdd") g.zoomBy(0.85)
       else if (e.code === "Minus" || e.code === "NumpadSubtract") g.zoomBy(1.18)
       else if (e.code === "KeyM") setPanelOpen((p) => (p === "map" ? null : "map"))
       else if (e.code === "KeyT") setPanelOpen((p) => (p === "time" ? null : "time"))
@@ -483,6 +563,31 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
     }
   }
 
+  // Drag to look around: turn the camera round you and tilt it. A tap without a drag still advances dialogue.
+  const look = React.useRef<{ id: number; x: number; y: number; moved: number } | null>(null)
+  const onLookDown = (e: React.PointerEvent) => {
+    if (phase !== "play" || look.current) return
+    look.current = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }
+  const onLookMove = (e: React.PointerEvent) => {
+    const l = look.current
+    if (!l || e.pointerId !== l.id) return
+    const dx = e.clientX - l.x
+    const dy = e.clientY - l.y
+    l.x = e.clientX
+    l.y = e.clientY
+    l.moved += Math.abs(dx) + Math.abs(dy)
+    if (l.moved > 4) gameRef.current?.orbit(dx * 0.009, dy * 0.006)
+  }
+  const onLookUp = (e: React.PointerEvent) => {
+    const l = look.current
+    if (!l || e.pointerId !== l.id) return
+    look.current = null
+    if (l.moved <= 4 && dialogueRef.current && !dialogueRef.current.choices) gameRef.current?.interact()
+  }
+  const [grabbing, setGrabbing] = React.useState(false)
+
   const WeatherIcon = WEATHER_ICON[weatherNow]
   const shown = dialogue ? dialogue.text.slice(0, typed) : ""
   const textDone = dialogue ? typed >= dialogue.text.length : true
@@ -496,29 +601,42 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
     >
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 size-full [image-rendering:pixelated]"
+        className={cn("absolute inset-0 size-full touch-none [image-rendering:pixelated]", phase === "play" && (grabbing ? "cursor-grabbing" : "cursor-grab"))}
         role="img"
-        aria-label="An isometric pixel-art Dehradun: the ISBT, Shimla Bypass Chowk, Turner Road, Clement Town Cantonment, its lake and Mindrolling Monastery."
-        onClick={() => {
-          if (phase === "play" && dialogue && !dialogue.choices) gameRef.current?.interact()
+        aria-label="An isometric pixel-art Dehradun on a floating island: the ISBT, Shimla Bypass Chowk, Turner Road, Clement Town Cantonment, its lake and Mindrolling Monastery. Drag to look around."
+        onPointerDown={(e) => {
+          onLookDown(e)
+          setGrabbing(true)
+        }}
+        onPointerMove={onLookMove}
+        onPointerUp={(e) => {
+          onLookUp(e)
+          setGrabbing(false)
+        }}
+        onPointerCancel={(e) => {
+          onLookUp(e)
+          setGrabbing(false)
         }}
       />
 
-      {/* Touch: the left half is a joystick. */}
+      {/* Touch: the left half is a joystick, the right half looks around. */}
       {touch && phase === "play" && !panelOpen && (
-        <div className="absolute inset-y-0 left-0 z-10 w-1/2 touch-none" onPointerDown={onStickDown} onPointerMove={onStickMove} onPointerUp={onStickUp} onPointerCancel={onStickUp} />
+        <>
+          <div className="absolute inset-y-0 left-0 z-10 w-1/2 touch-none" onPointerDown={onStickDown} onPointerMove={onStickMove} onPointerUp={onStickUp} onPointerCancel={onStickUp} />
+          <div className="absolute inset-y-0 right-0 z-10 w-1/2 touch-none" onPointerDown={onLookDown} onPointerMove={onLookMove} onPointerUp={onLookUp} onPointerCancel={onLookUp} />
+        </>
       )}
       {stick && (
         <div className="pointer-events-none fixed z-20" style={{ left: stick.x - 44, top: stick.y - 44 }}>
           <div className="size-[88px] rounded-full border-2 border-[#fff8e8]/50 bg-black/20" />
-          <div className="absolute left-[30px] top-[30px] size-7 rounded-full border-2 border-[#3a2a1a] bg-[#fff8e8]" style={{ transform: `translate(${stick.dx}px, ${stick.dy}px)` }} />
+          <div className="absolute left-[30px] top-[30px] size-7 rounded-full border-2 border-[#e2c275] bg-[#1d1838]" style={{ transform: `translate(${stick.dx}px, ${stick.dy}px)` }} />
         </div>
       )}
 
       {/* Friend's name tag and speech bubble. */}
       <div ref={friendTagRef} className="pointer-events-none absolute left-0 top-0 z-10 flex flex-col items-center opacity-0 transition-opacity">
         <div ref={friendBubbleRef} className={cn(panel, "mb-1 hidden max-w-44 px-2 py-1 text-center text-xs leading-tight")} />
-        <span className="bg-[#8e1b3a] px-1.5 py-px text-[0.625rem] tracking-wide text-[#fff8e8]">{FRIEND_NAME}</span>
+        <span className="rounded-sm border border-[#ffd36a] bg-[#8e1b3a] px-1.5 py-px text-[0.625rem] tracking-wide text-[#fff8e8] shadow-[0_0_8px_#ff9ec4aa]">✦ {FRIEND_NAME}</span>
       </div>
 
       {phase === "play" && (
@@ -527,7 +645,7 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
           <div className="pointer-events-none absolute left-3 top-3 z-20 flex max-w-[calc(100%-12.75rem)] flex-col gap-2 sm:max-w-[22rem]">
             <div className={cn(panel, "px-3 py-2")}>
               <p className="text-sm font-semibold leading-tight">{place}</p>
-              <p className="mt-0.5 flex items-center gap-1.5 text-xs text-[#5a4a3a]">
+              <p className="mt-0.5 flex items-center gap-1.5 text-xs text-[#c8bba0]">
                 <WeatherIcon className="size-3.5" aria-hidden />
                 <span ref={clockRef}>{clockLabel(minutes)}</span>
                 <span aria-hidden>·</span>
@@ -535,12 +653,13 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
               </p>
             </div>
             {objective && (
-              <div className={cn(panel, "flex items-center gap-2 bg-[#fff1c8]/95 px-3 py-1.5")}>
-                <div ref={arrowRef} className="shrink-0 text-[#8e1b3a] transition-opacity" aria-hidden>
+              <div className={cn(panel, "flex items-center gap-2 px-3 py-1.5")}>
+                <div ref={arrowRef} className="shrink-0 text-[#ffd36a] transition-opacity" aria-hidden>
                   <Navigation className="size-4 fill-current" />
                 </div>
                 <p className="text-xs leading-tight">
-                  {objective} <span ref={distRef} className="text-[#8e1b3a]" />
+                  <span className="mr-1 text-[0.625rem] tracking-widest text-[#ffd36a]">QUEST</span>
+                  {objective} <span ref={distRef} className="text-[#ffd36a]" />
                 </p>
               </div>
             )}
@@ -565,12 +684,6 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
           {/* Bottom right: minimap, camera controls. */}
           <div className="absolute bottom-3 right-3 z-20 flex flex-col items-end gap-1.5">
             <div className="flex gap-1.5">
-              <button type="button" className={chip} onClick={() => gameRef.current?.rotate(-1)} aria-label="Turn the camera left (Z)" title="Turn · Z">
-                <RotateCcw className="size-4" aria-hidden />
-              </button>
-              <button type="button" className={chip} onClick={() => gameRef.current?.rotate(1)} aria-label="Turn the camera right (X)" title="Turn · X">
-                <RotateCw className="size-4" aria-hidden />
-              </button>
               <button type="button" className={chip} onClick={() => gameRef.current?.zoomBy(0.8)} aria-label="Zoom in (+)" title="Zoom in · +">
                 <ZoomIn className="size-4" aria-hidden />
               </button>
@@ -580,10 +693,10 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
             </div>
             <canvas
               ref={miniRef}
-              width={132}
-              height={132}
+              width={144}
+              height={144}
               onClick={() => setPanelOpen("map")}
-              className={cn(panel, "pointer-events-auto hidden cursor-pointer [image-rendering:pixelated] sm:block")}
+              className="pointer-events-auto size-[104px] cursor-pointer rounded-full shadow-[0_0_0_2px_#2a1d10,0_6px_16px_#0009] sm:size-36"
               aria-label="Minimap: open the map"
             />
           </div>
@@ -591,8 +704,10 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
           {/* Place banner. */}
           {banner && (
             <div key={banner.id} className="pointer-events-none absolute inset-x-0 top-[18%] z-10 flex animate-[doon-banner_3.2s_ease-out_forwards] flex-col items-center text-center">
-              <p className={cn(TITLE, "text-[0.8rem] text-[#fff8e8] [text-shadow:2px_2px_0_#3a2a1a] sm:text-base")}>{banner.name}</p>
-              <p className="mt-2 text-xs text-[#fff8e8]/85 [text-shadow:1px_1px_0_#3a2a1a]">{banner.note}</p>
+              <p className="text-[0.625rem] tracking-[0.4em] text-[#ffe7a8] [text-shadow:0_0_6px_#000]">✦ AREA ✦</p>
+              <p className={cn(TITLE, "mt-2 text-[0.8rem] text-[#fff4d6] [text-shadow:0_0_10px_#ffb84a,2px_2px_0_#2a1d10] sm:text-base")}>{banner.name}</p>
+              <div className="mt-2 h-px w-48 bg-gradient-to-r from-transparent via-[#e2c275] to-transparent" />
+              <p className="mt-1.5 text-xs text-[#fff8e8]/90 [text-shadow:1px_1px_0_#2a1d10]">{banner.note}</p>
             </div>
           )}
 
@@ -601,7 +716,7 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
             {toasts.map((t) => (
               <div key={t.id} className={cn(panel, "animate-[doon-toast_0.25s_ease-out] px-3 py-1.5 text-center")}>
                 <p className="text-xs font-semibold">{t.title}</p>
-                {t.sub && <p className="text-[0.6875rem] leading-tight text-[#5a4a3a]">{t.sub}</p>}
+                {t.sub && <p className="text-[0.6875rem] leading-tight text-[#c8bba0]">{t.sub}</p>}
               </div>
             ))}
           </div>
@@ -613,9 +728,9 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
               onClick={() => gameRef.current?.interact()}
               className={cn(panel, "pointer-events-auto absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 px-3 py-2 text-sm")}
             >
-              {!touch && <kbd className="border border-[#3a2a1a] bg-[#3a2a1a] px-1.5 text-[0.625rem] text-[#fff8e8]">E</kbd>}
+              {!touch && <kbd className="rounded-sm border border-[#e2c275] bg-[#e2c275] px-1.5 text-[0.625rem] text-[#1d1838]">E</kbd>}
               <span>
-                {prompt.verb} <span className="text-[#5a4a3a]">· {prompt.label}</span>
+                {prompt.verb} <span className="text-[#c8bba0]">· {prompt.label}</span>
               </span>
             </button>
           )}
@@ -631,9 +746,9 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
                 }}
               >
                 {dialogue.speaker && (
-                  <p className={cn("mb-1 text-xs font-semibold", dialogue.who === "friend" ? "text-[#8e1b3a]" : "text-[#1f5558]")}>{dialogue.speaker}</p>
+                  <p className={cn("mb-1 text-xs font-semibold", dialogue.who === "friend" ? "text-[#ff9ec4]" : "text-[#8fe8f0]")}>{dialogue.speaker}</p>
                 )}
-                <p className={cn("min-h-[2.5rem] text-sm leading-snug", dialogue.who === "narrator" && "italic text-[#5a4a3a]")}>
+                <p className={cn("min-h-[2.5rem] text-sm leading-snug", dialogue.who === "narrator" && "italic text-[#c8bba0]")}>
                   {shown}
                   <span className="sr-only">{dialogue.text.slice(typed)}</span>
                 </p>
@@ -643,19 +758,19 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
                       <button
                         key={c.id}
                         type="button"
-                        className="border-2 border-[#3a2a1a] bg-[#fff1c8] px-2 py-1 text-left text-xs hover:bg-[#ffe39a] focus-visible:outline-2 focus-visible:outline-[#3a2a1a]"
+                        className={cn(option, "px-2 py-1 text-left text-xs")}
                         onClick={(e) => {
                           e.stopPropagation()
                           gameRef.current?.pick(c.id)
                         }}
                       >
-                        {!touch && <span className="mr-1.5 text-[#8e1b3a]">{i + 1}</span>}
+                        {!touch && <span className="mr-1.5 text-[#ffd36a]">{i + 1}</span>}
                         {c.label}
                       </button>
                     ))}
                   </div>
                 ) : (
-                  textDone && <p className="mt-1 text-right text-[0.625rem] text-[#5a4a3a]">{touch ? "tap" : "E / click"} ▸</p>
+                  textDone && <p className="mt-1 text-right text-[0.625rem] text-[#c8bba0]">{touch ? "tap" : "E / click"} ▸</p>
                 )}
               </div>
             </div>
@@ -665,7 +780,7 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
           {touch && !dialogue && (
             <button
               type="button"
-              className={cn(chip, "absolute bottom-24 right-4 z-20 size-14 rounded-full text-xs font-semibold")}
+              className={cn(chip, "absolute bottom-8 right-[8.5rem] z-20 size-14 rounded-full text-xs font-semibold")}
               onClick={() => gameRef.current?.interact()}
               disabled={!prompt}
               aria-label={prompt ? `${prompt.verb}: ${prompt.label}` : "Nothing to do here"}
@@ -707,11 +822,11 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
             max={1439}
             value={minutes}
             onChange={(e) => setTime(Number(e.target.value))}
-            className="mt-1 h-1 w-full cursor-pointer accent-[#8e1b3a]"
+            className="mt-1 h-1 w-full cursor-pointer accent-[#e2c275]"
           />
           <div className="mt-2 flex flex-wrap gap-1">
             {TIME_PRESETS.map(([label, m]) => (
-              <button key={label} type="button" onClick={() => setTime(m)} className="border border-[#3a2a1a] bg-[#fff1c8] px-1.5 py-0.5 text-[0.6875rem] hover:bg-[#ffe39a]">
+              <button key={label} type="button" onClick={() => setTime(m)} className={cn(option, "px-1.5 py-0.5 text-[0.6875rem]")}>
                 {label}
               </button>
             ))}
@@ -729,7 +844,7 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
                 type="button"
                 onClick={() => setSpeed(s as number)}
                 aria-pressed={timeSpeed === s}
-                className={cn("flex-1 border border-[#3a2a1a] px-1 py-0.5 text-[0.6875rem]", timeSpeed === s ? "bg-[#3a2a1a] text-[#fff8e8]" : "bg-[#fff1c8] hover:bg-[#ffe39a]")}
+                className={cn("flex-1 px-1 py-0.5 text-[0.6875rem]", timeSpeed === s ? optionOn : option)}
               >
                 {label}
               </button>
@@ -741,7 +856,7 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
               type="button"
               onClick={() => pickWeather("auto")}
               aria-pressed={weather === "auto"}
-              className={cn("flex flex-col items-center gap-0.5 border border-[#3a2a1a] px-1 py-1 text-[0.625rem]", weather === "auto" ? "bg-[#3a2a1a] text-[#fff8e8]" : "bg-[#fff1c8] hover:bg-[#ffe39a]")}
+              className={cn("flex flex-col items-center gap-0.5 px-1 py-1 text-[0.625rem]", weather === "auto" ? optionOn : option)}
             >
               <Sparkles className="size-3.5" aria-hidden />
               Auto
@@ -754,7 +869,7 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
                   type="button"
                   onClick={() => pickWeather(k)}
                   aria-pressed={weather === k}
-                  className={cn("flex flex-col items-center gap-0.5 border border-[#3a2a1a] px-1 py-1 text-[0.625rem]", weather === k ? "bg-[#3a2a1a] text-[#fff8e8]" : "bg-[#fff1c8] hover:bg-[#ffe39a]")}
+                  className={cn("flex flex-col items-center gap-0.5 px-1 py-1 text-[0.625rem]", weather === k ? optionOn : option)}
                 >
                   <Icon className="size-3.5" aria-hidden />
                   {k === "mist" ? "Fog" : WEATHER_NAME[k]}
@@ -762,7 +877,7 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
               )
             })}
           </div>
-          <p className="mt-2 text-[0.6875rem] leading-tight text-[#5a4a3a]">
+          <p className="mt-2 text-[0.6875rem] leading-tight text-[#c8bba0]">
             The sun follows real December geometry for Dehradun: it sets at about 5:20 pm. In Auto the weather turns every few game hours.
           </p>
         </div>
@@ -779,15 +894,15 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
             {(touch
               ? [
                   ["Left half", "drag to walk, far to run"],
-                  ["Use", "talk, buy, look"],
-                  ["⟲ ⟳", "turn the camera"],
+                  ["Right half", "drag to turn and tilt the camera"],
+                  ["Use", "talk, buy, warp"],
                 ]
               : [
                   ["WASD / ←↑↓→", "walk"],
                   ["Shift", "run"],
                   ["E / Space", "talk, buy, next line"],
                   ["1 – 4", "pick a reply"],
-                  ["Z / X", "turn the camera"],
+                  ["Drag", "turn and tilt the camera"],
                   ["+ / − / wheel", "zoom"],
                   ["M", "map and fast travel"],
                   ["T", "time and weather"],
@@ -796,12 +911,12 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
             ).map(([k, v]) => (
               <React.Fragment key={k}>
                 <dt className="font-semibold">{k}</dt>
-                <dd className="text-[#5a4a3a]">{v}</dd>
+                <dd className="text-[#c8bba0]">{v}</dd>
               </React.Fragment>
             ))}
           </dl>
-          <p className="mt-3 leading-tight text-[#5a4a3a]">
-            The roads follow the real ones from surveyed points: ISBT, the chowk, Turner Road, the cantonment gate. Buildings between the landmarks are generated.
+          <p className="mt-3 leading-tight text-[#c8bba0]">
+            The roads follow the real ones from surveyed points: ISBT, the chowk, Turner Road, the cantonment gate. Buildings between the landmarks are generated. Step up to a warp crystal to travel.
           </p>
         </div>
       )}
@@ -809,8 +924,9 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
       {/* Title. */}
       {(phase === "loading" || phase === "title") && (
         <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-gradient-to-b from-[#0d0f1c]/70 via-[#0d0f1c]/20 to-[#0d0f1c]/80 p-6 text-center">
-          <p className="text-xs tracking-[0.3em] text-[#ffd8a8]/90">DEHRADUN · UTTARAKHAND</p>
-          <h1 className={cn(TITLE, "mt-3 text-xl leading-snug text-[#fff8e8] [text-shadow:3px_3px_0_#8e1b3a] sm:text-3xl")}>Doon Diorama</h1>
+          <p className="text-xs tracking-[0.3em] text-[#ffe7a8]/90 [text-shadow:0_0_8px_#000]">✦ DEHRADUN · UTTARAKHAND ✦</p>
+          <h1 className={cn(TITLE, "mt-3 text-xl leading-snug text-[#fff4d6] [text-shadow:0_0_14px_#ffb84a,3px_3px_0_#5a2a6a] sm:text-3xl")}>Doon Diorama</h1>
+          <p className="mt-2 text-xs tracking-wide text-[#c8b8ff] [text-shadow:0_0_6px_#000]">a little isekai on a floating Dehradun</p>
           <p className="mt-3 max-w-md text-sm text-[#fff8e8]/90 [text-shadow:1px_1px_0_#000]">
             ISBT → Shimla Bypass Chowk → Turner Road → Clement Town. A winter evening, and {FRIEND_NAME} is waiting by the lake.
           </p>
@@ -820,13 +936,13 @@ export default function DoonDiorama({ isPhone, isFocused, isVisible }: AppProps)
             <button
               type="button"
               onClick={start}
-              className="mt-6 border-2 border-[#3a2a1a] bg-[#ffd36a] px-5 py-2.5 text-sm font-semibold text-[#2a2018] shadow-[4px_4px_0_#3a2a1a] transition-transform hover:-translate-y-0.5 active:translate-y-0.5"
+              className="mt-6 rounded-md border-2 border-[#fff1c0] bg-gradient-to-b from-[#ffd36a] to-[#e09a2a] px-6 py-2.5 text-sm font-semibold text-[#2a1d10] shadow-[0_0_0_2px_#2a1d10,0_0_24px_#ffb84a88] transition-transform hover:-translate-y-0.5 active:translate-y-0.5"
               autoFocus
             >
               Start walking
             </button>
           )}
-          <p className="mt-4 text-[0.6875rem] text-[#fff8e8]/60">{touch ? "Drag on the left to walk · tap Use to talk" : "WASD to walk · Shift to run · E to talk · Z/X to turn"}</p>
+          <p className="mt-4 text-[0.6875rem] text-[#fff8e8]/60">{touch ? "Left: walk · right: look around · Use to talk" : "WASD to walk · drag to look around · E to talk · Shift to run"}</p>
         </div>
       )}
 
@@ -876,7 +992,6 @@ function MapPanel({ plan, player, onClose, onTravel }: { plan: Plan; player: [nu
     // Scale bar: 250 m.
     ctx.fillRect(14, h - 18, 250 * scale, 3)
     ctx.fillText("250 m", 14, h - 24)
-    ctx.fillText("N ↑", w - 30, 18)
   }, [plan, player])
 
   return (
@@ -893,16 +1008,16 @@ function MapPanel({ plan, player, onClose, onTravel }: { plan: Plan; player: [nu
             <canvas ref={ref} className="block" />
           </div>
           <div className="flex shrink-0 flex-wrap gap-1.5 @xl:w-48 @xl:flex-col">
-            <p className="w-full text-xs text-[#5a4a3a]">Go to</p>
+            <p className="w-full text-xs text-[#c8bba0]">Go to</p>
             {PLACES.filter((p) => p.travel).map((p) => (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => onTravel(p.id)}
-                className="border-2 border-[#3a2a1a] bg-[#fff1c8] px-2 py-1 text-left text-xs hover:bg-[#ffe39a] focus-visible:outline-2 focus-visible:outline-[#3a2a1a]"
+                className={cn(option, "px-2 py-1 text-left text-xs")}
               >
                 <span className="font-semibold">{p.name}</span>
-                <span className="block text-[0.625rem] text-[#5a4a3a]">{p.note}</span>
+                <span className="block text-[0.625rem] text-[#c8bba0]">{p.note}</span>
               </button>
             ))}
           </div>

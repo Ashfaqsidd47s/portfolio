@@ -228,7 +228,7 @@ export function frontWall(k: Kit, w: number, z: number, colour: number) {
 
 // ── trees ───────────────────────────────────────────────────────────────────
 
-export type TreeKind = "mango" | "sal" | "eucalyptus" | "ashoka" | "lychee" | "pine" | "palm"
+export type TreeKind = "mango" | "sal" | "eucalyptus" | "ashoka" | "lychee" | "pine" | "palm" | "kachnar" | "jacaranda"
 
 export function tree(k: Kit, x: number, z: number, kind: TreeKind, size = 1, paintedTrunk = false) {
   const { b, r } = k
@@ -246,6 +246,20 @@ export function tree(k: Kit, x: number, z: number, kind: TreeKind, size = 1, pai
       b.ball(0, 3.7 * s, 0, 2.4 * s, leaf, 7, 4, 0.75)
       b.ball(1.1 * s, 3.2 * s, 0.6 * s, 1.6 * s, leaf + 0x060a04, 6, 3, 0.8)
       b.ball(-1.0 * s, 3.4 * s, -0.7 * s, 1.5 * s, leaf, 6, 3, 0.8)
+      b.ball(0.3 * s, 4.9 * s, 0.2 * s, 1.2 * s, kind === "mango" ? 0x4f8a3a : 0x5c9a44, 6, 3, 0.8)
+      b.sway = 0
+      break
+    }
+    case "kachnar":
+    case "jacaranda": {
+      // Kachnar (pink orchid tree) and jacaranda both flower along Doon's roads; here they're always in bloom.
+      const bloom = kind === "kachnar" ? [0xf28cb8, 0xf7a8c8, 0xe86ea4] : [0xa98ce8, 0xbca2f2, 0x8f6fd8]
+      b.cyl(0, 0, 0, 0.26 * s, 0.18 * s, 2.6 * s, 0x6b4a3a, 6)
+      b.sway = leafSway
+      b.ball(0, 3.9 * s, 0, 2.2 * s, bloom[0], 7, 4, 0.7)
+      b.ball(1.2 * s, 3.5 * s, 0.4 * s, 1.4 * s, bloom[1], 6, 3, 0.8)
+      b.ball(-1.1 * s, 3.6 * s, -0.5 * s, 1.4 * s, bloom[2], 6, 3, 0.8)
+      b.ball(0.2 * s, 4.9 * s, 0.1 * s, 1.1 * s, bloom[1], 6, 3, 0.8)
       b.sway = 0
       break
     }
@@ -468,4 +482,19 @@ export function chaiStall(k: Kit, name = "CHAI") {
   b.glow = null
   b.at(0, 0, -1.8, 0, () => bench(k))
   board(k, name, { bg: 0xf2c94c, fg: 0x7a2a22 }, 0.4, 2.0, 2)
+}
+
+/** A patch of wildflowers. */
+export function flowers(k: Kit, n = 9, spread = 1.6) {
+  const { b, r } = k
+  const colours = [0xf7a8c8, 0xf2d24c, 0xffffff, 0xb79cf0, 0xf28c5c]
+  const c = r.pick(colours)
+  b.sway = 0.3
+  for (let i = 0; i < n; i++) {
+    const x = (r.next() - 0.5) * spread * 2
+    const z = (r.next() - 0.5) * spread * 2
+    b.box(x, 0, z, 0.05, 0.28, 0.05, 0x4f8a3a)
+    b.box(x, 0.28, z, 0.18, 0.12, 0.18, r.chance(0.75) ? c : r.pick(colours))
+  }
+  b.sway = 0
 }
